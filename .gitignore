@@ -1,0 +1,54 @@
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Data and Results
+data/
+results/*
+!results/darts_correlation.png
+!results/rank_correlation_cifar100.png
+!results/darts_search_trajectory.png
+!results/paradox_mechanism.png
+*.csv
+*.json
+*.jpg
+*.pdf
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
