@@ -51,7 +51,7 @@ def test_bad_digest_prevents_extraction(tmp_path):
 
 @pytest.mark.parametrize("unsafe", [
     "../xgb/escape", "/xgb/absolute", "C:/xgb/windows",
-    "xgb/../escape", "xgb\\\\escape", "./xgb/escape",
+    "xgb/../escape", "xgb" + chr(92) + "escape", "./xgb/escape",
 ])
 def test_unsafe_zip_paths_are_rejected(tmp_path, unsafe):
     archive = make_zip(tmp_path / "unsafe.zip", [(unsafe, b"attack")])
@@ -150,3 +150,25 @@ def test_malformed_archive_does_not_create_destination(tmp_path):
             archive, tmp_path / "installed", expected_sha256=sha256(archive),
         )
     assert not (tmp_path / "installed").exists()
+
+
+def test_too_many_archive_entries_is_rejected(tmp_path):
+    archive = make_zip(tmp_path / "many.zip", [
+        ("ignored/a", b"1"), ("ignored/b", b"2"), ("xgb/model", b"3"),
+    ])
+    with pytest.raises(ValueError, match="too many entries"):
+        install_from_archive(
+            archive, tmp_path / "installed",
+            expected_sha256=sha256(archive), max_archive_entries=2,
+        )
+
+
+def test_extreme_compression_ratio_is_rejected(tmp_path):
+    archive = make_zip(tmp_path / "bomb.zip", [
+        ("xgb/repetitive", b"0" * 10000),
+    ])
+    with pytest.raises(ValueError, match="compression ratio"):
+        install_from_archive(
+            archive, tmp_path / "installed",
+            expected_sha256=sha256(archive), max_compression_ratio=10,
+        )
