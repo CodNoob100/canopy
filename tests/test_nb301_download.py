@@ -181,3 +181,17 @@ def test_downgrade_redirect_is_rejected_before_following():
             req=None, fp=None, code=302, msg="Found",
             headers={}, newurl="http://attacker.test/models.zip",
         )
+
+
+def test_importing_downloader_never_uses_network(monkeypatch):
+    """Imports must not start multi-gigabyte downloads or touch model files."""
+    import runpy
+    import urllib.request
+
+    def fail_network(*args, **kwargs):
+        raise AssertionError("Downloader import unexpectedly accessed the network")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fail_network)
+    monkeypatch.setattr(urllib.request, "build_opener", fail_network)
+    downloader = Path(__file__).resolve().parents[1] / "examples" / "download_nb301_models.py"
+    runpy.run_path(str(downloader), run_name="offline_import_check")
