@@ -53,6 +53,15 @@ def _sha256_file(path: Path, *, max_bytes: int) -> str:
     return digest.hexdigest()
 
 
+class _HTTPSOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuse any redirect to an unencrypted transport before following it."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urllib.parse.urlsplit(newurl).scheme != "https":
+            raise ValueError("Model download redirect must use HTTPS")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def download_archive(
     url: str, destination: Path, *, expected_sha256: str,
     max_bytes: int = MAX_ARCHIVE_BYTES,
@@ -65,7 +74,7 @@ def download_archive(
     digest = hashlib.sha256()
     total = 0
     try:
-        with urllib.request.urlopen(url, timeout=60) as response:
+        with urllib.request.build_opener(_HTTPSOnlyRedirectHandler()).open(url, timeout=60) as response:
             if urllib.parse.urlsplit(response.geturl()).scheme != "https":
                 raise ValueError("Model download redirected to a non-HTTPS URL")
             with destination.open("xb") as output:
