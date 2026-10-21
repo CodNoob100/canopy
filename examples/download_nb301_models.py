@@ -30,6 +30,7 @@ MAX_ARCHIVE_BYTES = 3 * 1024**3
 MAX_UNCOMPRESSED_BYTES = 12 * 1024**3
 MAX_MEMBER_BYTES = 4 * 1024**3
 MAX_SELECTED_FILES = 5000
+MAX_ARCHIVE_ENTRIES = 10000
 MAX_COMPRESSION_RATIO = 1000.0
 BUFFER_SIZE = 1024 * 1024
 
@@ -84,7 +85,7 @@ def download_archive(
 def _safe_relative_path(info: zipfile.ZipInfo) -> Path:
     """Reject path traversal, Windows paths, links, and special entries."""
     raw = info.filename
-    if not raw or "\\\\" in raw or "\\x00" in raw or raw.startswith("/"):
+    if not raw or chr(92) in raw or chr(0) in raw or raw.startswith("/"):
         raise ValueError(f"Unsafe archive member path: {raw!r}")
 
     parts = raw.rstrip("/").split("/")
@@ -113,6 +114,7 @@ def extract_models(
     max_total_bytes: int = MAX_UNCOMPRESSED_BYTES,
     max_member_bytes: int = MAX_MEMBER_BYTES,
     max_files: int = MAX_SELECTED_FILES,
+    max_archive_entries: int = MAX_ARCHIVE_ENTRIES,
     max_compression_ratio: float = MAX_COMPRESSION_RATIO,
 ) -> int:
     """Extract selected regular files into a NEW staging directory.
@@ -125,6 +127,8 @@ def extract_models(
         raise FileExistsError(f"Destination already exists: {destination}")
 
     with zipfile.ZipFile(archive_path) as archive:
+        if len(archive.infolist()) > max_archive_entries:
+            raise ValueError("Archive contains too many entries")
         chosen: list[tuple[zipfile.ZipInfo, Path]] = []
         seen: set[Path] = set()
         claimed_bytes = 0
