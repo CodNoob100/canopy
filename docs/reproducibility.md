@@ -37,3 +37,19 @@ must be interpreted with its `accuracy_source` column.
 This PR adds metadata to the existing `ExperimentRunner`; a public
 `canopy evaluate` CLI remains a separate feature requiring explicit
 benchmark path, dataset, and seed validation.
+
+## Missing benchmark entries
+
+When a proposed architecture is absent from the benchmark, its accuracy is
+**unknown**, not 0%. The evaluator now writes JSON `null` for an unavailable
+final accuracy or a trajectory with no observed accuracies so far. Once an
+available architecture is encountered, the trajectory retains the highest
+*observed* accuracy. Results carry `missing_benchmark_lookups` and
+`trajectory_lookup_available`; CSV rows include `benchmark_lookup_available`.
+A genuine benchmark accuracy of 0.0 remains numeric zero.
+
+A synthetic benchmark that represents only a subset of the NAS search space may
+produce many missing lookups. The labels and counts make this visible instead
+of disguising gaps as 0%-accuracy observations. This is a compatibility change
+for downstream analyses that previously expected every accuracy to be numeric:
+handle `null`/empty cells explicitly when plotting or computing statistics.
