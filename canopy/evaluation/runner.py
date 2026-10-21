@@ -5,10 +5,18 @@ Evaluation runner for benchmarking expressivity-guided NAS against baselines.
 import os
 import json
 import time
+import platform
+import re
+import subprocess
+from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Any
 
+from canopy import __version__
 from canopy.nas.architecture import SearchSpace
 from canopy.nas.search import EvolutionarySearch
 from canopy.nas.benchmark import NATSBenchAPI, SyntheticBenchmark, create_benchmark
@@ -29,15 +37,23 @@ class ExperimentRunner:
         n_generations: int = 50,
         max_evaluations: int = 500,
         output_dir: str = "results",
+        benchmark_source_id: Optional[str] = None,
+        benchmark_sha256: Optional[str] = None,
     ):
+        supported = {"tropical_generic", "tropical_tight", "param_count", "random"}
+        selected = list(strategies) if strategies is not None else [
+            "tropical_generic", "tropical_tight", "param_count", "random"
+        ]
+        if not selected or any(strategy not in supported for strategy in selected):
+            raise ValueError(f"strategies must be nonempty and chosen from {sorted(supported)}")
+        if benchmark_sha256 is not None and not re.fullmatch(r"[0-9a-fA-F]{64}", benchmark_sha256):
+            raise ValueError("benchmark_sha256 must be a 64-character hexadecimal digest")
+
+        self.benchmark_source_id = benchmark_source_id
+        self.benchmark_sha256 = benchmark_sha256.lower() if benchmark_sha256 else None
         self.search_space = search_space
         self.benchmark = benchmark
-        self.strategies = strategies or [
-            "tropical_generic",
-            "tropical_tight",
-            "param_count",
-            "random",
-        ]
+        self.strategies = selected
         self.population_size = population_size
         self.n_generations = n_generations
         self.max_evaluations = max_evaluations
@@ -45,7 +61,7 @@ class ExperimentRunner:
 
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def _get_fitness_fn(self, strategy: str):
+    def _get_fitness_fn(self, strategy: str, *, seed: Optional[int] = None):
         """Return a custom fitness function for non-tropical strategies."""
         if strategy == "param_count":
             def param_fitness(arch):
@@ -57,8 +73,11 @@ class ExperimentRunner:
             return param_fitness
 
         elif strategy == "random":
+            # Independent per-experiment RNG. Never mutate process-global NumPy state.
+            rng = np.random.default_rng(seed)
+
             def random_fitness(arch):
-                return float(np.random.rand())
+                return float(rng.random())
             return random_fitness
 
         return None  # Will default to tropical scoring
@@ -69,13 +88,131 @@ class ExperimentRunner:
             return "tight"
         return "generic"
 
+
+    @staticmethod
+    def _score_units(strategy: str) -> str:
+        return {
+            "tropical_generic": "count_bound",
+            "tropical_tight": "count_bound",
+            "param_count": "benchmark_parameter_score",
+            "random": "unit_interval_random",
+        }[strategy]
+
+    @staticmethod
+    def _score_interpretation(strategy: str) -> str:
+        return {
+            "tropical_generic": "Architecture-level combinatorial upper bound, not exact realized regions",
+            "tropical_tight": "Bottleneck-aware upper bound, not exact realized regions",
+            "param_count": "Parameter count returned by the benchmark, whose units may vary",
+            "random": "Seeded uniformly sampled baseline score, not a performance prediction",
+        }[strategy]
+
+    def _accuracy_source(self) -> str:
+        if isinstance(self.benchmark, SyntheticBenchmark):
+            return "synthetic_simulation"
+        if isinstance(self.benchmark, NATSBenchAPI):
+            return "nats_bench_reported"
+        return "unclassified_benchmark"
+
+    @staticmethod
+    def _git_revision() -> Optional[str]:
+        """Record the checked-out source revision, if git metadata is available."""
+        try:
+            root = Path(__file__).resolve().parents[2]
+            proc = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=root, check=True,
+                capture_output=True, text=True, timeout=3,
+            )
+            commit = proc.stdout.strip()
+            return commit if re.fullmatch(r"[0-9a-fA-F]{40}", commit) else None
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return None
+
+    @staticmethod
+    def _dependency_versions() -> Dict[str, Optional[str]]:
+        packages = ("numpy", "scipy", "pandas", "nats-bench")
+        versions: Dict[str, Optional[str]] = {}
+        for package in packages:
+            try:
+                versions[package] = version(package)
+            except PackageNotFoundError:
+                versions[package] = None
+        return versions
+
+    def _benchmark_metadata(self) -> Dict[str, Any]:
+        if isinstance(self.benchmark, SyntheticBenchmark):
+            return {
+                "kind": "synthetic",
+                "accuracy_source": "synthetic_simulation",
+                "dataset": "synthetic",
+                "generator_seed": self.benchmark.seed,
+                "generator_noise_std": self.benchmark.noise_std,
+                "n_architectures": self.benchmark.n_architectures,
+                "source_identifier": None,
+                "source_sha256": None,
+                "checksum_status": "not_applicable",
+            }
+        if isinstance(self.benchmark, NATSBenchAPI):
+            return {
+                "kind": "real_nats_bench",
+                "accuracy_source": "nats_bench_reported",
+                "dataset": self.benchmark.dataset,
+                "hyperparameter_setting": self.benchmark.hp,
+                "source_identifier": self.benchmark_source_id,
+                "source_sha256": self.benchmark_sha256,
+                "checksum_status": (
+                    "user_supplied_not_verified"
+                    if self.benchmark_sha256 else "not_recorded"
+                ),
+            }
+        return {
+            "kind": "unknown",
+            "accuracy_source": "unclassified_benchmark",
+            "dataset": None,
+            "source_identifier": self.benchmark_source_id,
+            "source_sha256": self.benchmark_sha256,
+            "checksum_status": (
+                "user_supplied_not_verified"
+                if self.benchmark_sha256 else "not_recorded"
+            ),
+        }
+
+    def _build_manifest(
+        self, *, n_seeds: int, output_files: Dict[str, str],
+    ) -> Dict[str, Any]:
+        return {
+            "manifest_schema_version": 1,
+            "canopy_version": __version__,
+            "git_commit": self._git_revision(),
+            "python_version": platform.python_version(),
+            "platform": platform.platform(),
+            "package_versions": self._dependency_versions(),
+            "benchmark": self._benchmark_metadata(),
+            "configuration": {
+                "search_space": type(self.search_space).__name__,
+                "strategies": list(self.strategies),
+                "population_size": self.population_size,
+                "n_generations": self.n_generations,
+                "max_evaluations": self.max_evaluations,
+                "seeds": list(range(n_seeds)),
+                "fitness": {
+                    name: {
+                        "units": self._score_units(name),
+                        "interpretation": self._score_interpretation(name),
+                    }
+                    for name in self.strategies
+                },
+            },
+            "files": output_files,
+        }
+
     def run_seed(self, seed: int) -> Dict[str, Any]:
         """Run all strategies for a single random seed."""
         results = {}
 
         for strategy in self.strategies:
             print(f"Running strategy: {strategy} (Seed: {seed})")
-            fitness_fn = self._get_fitness_fn(strategy)
+            fitness_fn = self._get_fitness_fn(strategy, seed=seed)
             scoring_mode = self._get_scoring_mode(strategy)
 
             searcher = EvolutionarySearch(
@@ -87,27 +224,8 @@ class ExperimentRunner:
                 fitness_fn=fitness_fn,
             )
 
-            trajectory = []
-            
-            # Keep track of the highest true accuracy found so far in the population
-            # (Note: standard NAS doesn't know true accuracy during search, 
-            # we just track it for evaluation plotting).
-            
-            def callback(gen: int, stats: Dict):
-                # The search stats only have the fitness score.
-                # We want to know the true test accuracy of the *best found architecture* so far.
-                # Actually, the callback doesn't give us the population, so we rely on the final 
-                # history processing or we can extract the true accuracy later if we track all evaluated archs.
-                pass
-
-            # Since the callback doesn't have the best arch, we will just use the final population
-            # but that only gives us the final state.
-            # Let's run the search and extract the ground-truth accuracy trajectory manually by intercepting evaluate!
-
-            # To properly track trajectory, we need to know the true accuracy of the arch that the search
-            # thought was "best" at each evaluation step. Or simply the max true accuracy of any evaluated arch.
-            # We will patch the fitness function locally to also record the true accuracy.
-
+            # Track the highest reported accuracy encountered for each newly
+            # evaluated architecture. The searcher caches duplicate candidates.
             eval_true_accs = []
             original_fitness_fn = fitness_fn
             
@@ -124,9 +242,8 @@ class ExperimentRunner:
 
             searcher.fitness_fn = tracking_fitness
 
-            t0 = time.perf_counter()
             search_result = searcher.search(max_evaluations=self.max_evaluations)
-            wall_time = time.perf_counter() - t0
+            wall_time = search_result.wall_time_seconds
 
             # Compute the cumulative max of true accuracies (the best seen so far)
             cum_max_accs = np.maximum.accumulate(eval_true_accs).tolist()
@@ -138,6 +255,8 @@ class ExperimentRunner:
             results[strategy] = {
                 "final_true_accuracy": final_true_acc,
                 "final_fitness_score": search_result.best_score,
+                "score_units": self._score_units(strategy),
+                "score_interpretation": self._score_interpretation(strategy),
                 "total_evaluations": search_result.total_evaluations,
                 "wall_time": wall_time,
                 "trajectory_evals": list(range(1, len(cum_max_accs) + 1)),
@@ -155,7 +274,7 @@ class ExperimentRunner:
             all_results.append({"seed": seed, "results": seed_results})
 
         # Save to JSON
-        timestamp = int(time.time())
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         output_file = os.path.join(self.output_dir, f"search_results_{timestamp}.json")
         with open(output_file, "w") as f:
             json.dump(all_results, f, indent=2)
@@ -173,10 +292,24 @@ class ExperimentRunner:
                         "strategy": strategy,
                         "evaluations": step,
                         "best_test_accuracy": acc,
+                        "accuracy_source": self._accuracy_source(),
+                        "fitness_score_units": stats["score_units"],
                     })
         df = pd.DataFrame(rows)
         csv_file = os.path.join(self.output_dir, f"search_trajectory_{timestamp}.csv")
         df.to_csv(csv_file, index=False)
         print(f"Saved trajectory dataframe to {csv_file}")
-        
+
+        manifest_file = os.path.join(self.output_dir, f"experiment_manifest_{timestamp}.json")
+        manifest = self._build_manifest(
+            n_seeds=n_seeds,
+            output_files={
+                "results_json": os.path.basename(output_file),
+                "trajectory_csv": os.path.basename(csv_file),
+            },
+        )
+        with open(manifest_file, "w", encoding="utf-8") as output:
+            json.dump(manifest, output, indent=2, sort_keys=True)
+        print(f"Saved reproducibility manifest to {manifest_file}")
+
         return all_results
