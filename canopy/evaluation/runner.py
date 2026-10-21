@@ -4,7 +4,6 @@ Evaluation runner for benchmarking expressivity-guided NAS against baselines.
 
 import os
 import json
-import time
 import platform
 import re
 import subprocess
@@ -19,7 +18,7 @@ from typing import Dict, List, Optional, Any
 from canopy import __version__
 from canopy.nas.architecture import SearchSpace
 from canopy.nas.search import EvolutionarySearch
-from canopy.nas.benchmark import NATSBenchAPI, SyntheticBenchmark, create_benchmark
+from canopy.nas.benchmark import NATSBenchAPI, SyntheticBenchmark
 
 
 class ExperimentRunner:
@@ -188,6 +187,10 @@ class ExperimentRunner:
             "platform": platform.platform(),
             "package_versions": self._dependency_versions(),
             "benchmark": self._benchmark_metadata(),
+            "missing_benchmark_data_policy": (
+                "Missing benchmark lookups are represented as null; "
+                "best-seen accuracy includes only observed entries."
+            ),
             "configuration": {
                 "search_space": type(self.search_space).__name__,
                 "strategies": list(self.strategies),
@@ -231,7 +234,7 @@ class ExperimentRunner:
             
             def tracking_fitness(arch):
                 entry = self.benchmark.query_by_arch(arch)
-                true_acc = entry.test_accuracy if entry else 0.0
+                true_acc = float(entry.test_accuracy) if entry is not None else None
                 eval_true_accs.append(true_acc)
                 
                 if original_fitness_fn:
@@ -245,12 +248,19 @@ class ExperimentRunner:
             search_result = searcher.search(max_evaluations=self.max_evaluations)
             wall_time = search_result.wall_time_seconds
 
-            # Compute the cumulative max of true accuracies (the best seen so far)
-            cum_max_accs = np.maximum.accumulate(eval_true_accs).tolist()
+            # Missing benchmark observations must remain missing, not be
+            # silently turned into measured 0% accuracies.
+            cum_max_accs = []
+            best_seen = None
+            for value in eval_true_accs:
+                if value is not None:
+                    best_seen = value if best_seen is None else max(best_seen, value)
+                cum_max_accs.append(best_seen)
 
-            # Find true accuracy of the final chosen best architecture
             best_entry = self.benchmark.query_by_arch(search_result.best_arch)
-            final_true_acc = best_entry.test_accuracy if best_entry else 0.0
+            final_true_acc = (
+                float(best_entry.test_accuracy) if best_entry is not None else None
+            )
 
             results[strategy] = {
                 "final_true_accuracy": final_true_acc,
@@ -261,6 +271,12 @@ class ExperimentRunner:
                 "wall_time": wall_time,
                 "trajectory_evals": list(range(1, len(cum_max_accs) + 1)),
                 "trajectory_accuracy": cum_max_accs,
+                "trajectory_lookup_available": [
+                    value is not None for value in eval_true_accs
+                ],
+                "missing_benchmark_lookups": sum(
+                    value is None for value in eval_true_accs
+                ),
             }
 
         return results
@@ -286,13 +302,18 @@ class ExperimentRunner:
         for res in all_results:
             seed = res["seed"]
             for strategy, stats in res["results"].items():
-                for step, acc in zip(stats["trajectory_evals"], stats["trajectory_accuracy"]):
+                for step, acc, observed in zip(
+                    stats["trajectory_evals"],
+                    stats["trajectory_accuracy"],
+                    stats["trajectory_lookup_available"],
+                ):
                     rows.append({
                         "seed": seed,
                         "strategy": strategy,
                         "evaluations": step,
                         "best_test_accuracy": acc,
                         "accuracy_source": self._accuracy_source(),
+                        "benchmark_lookup_available": observed,
                         "fitness_score_units": stats["score_units"],
                     })
         df = pd.DataFrame(rows)
