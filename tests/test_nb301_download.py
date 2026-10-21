@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from examples.download_nb301_models import (
-    _safe_relative_path,
+    _HTTPSOnlyRedirectHandler,
     download_archive,
     extract_models,
     install_from_archive,
@@ -171,4 +171,13 @@ def test_extreme_compression_ratio_is_rejected(tmp_path):
         install_from_archive(
             archive, tmp_path / "installed",
             expected_sha256=sha256(archive), max_compression_ratio=10,
+        )
+
+
+def test_downgrade_redirect_is_rejected_before_following():
+    handler = _HTTPSOnlyRedirectHandler()
+    with pytest.raises(ValueError, match="redirect must use HTTPS"):
+        handler.redirect_request(
+            req=None, fp=None, code=302, msg="Found",
+            headers={}, newurl="http://attacker.test/models.zip",
         )
