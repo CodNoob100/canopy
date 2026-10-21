@@ -33,6 +33,9 @@ eval = [
     "seaborn>=0.12",
 ]
 
+[project.scripts]
+canopy = "canopy.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["canopy*"]
