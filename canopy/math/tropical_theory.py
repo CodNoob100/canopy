@@ -677,13 +677,15 @@ def generic_linear_region_count(
     connectivity: Optional[np.ndarray] = None,
 ) -> int:
     """
-    Compute the **generic** (maximum, achievable with probability 1 under
-    random weights) number of linear regions for a feedforward ReLU network.
+    Compute a combinatorial *upper bound* on linear regions of a ReLU network.
+
+    This architecture-only quantity is not the exact region count of any
+    particular network; it may not be attained even with generic weights.
 
     Theorem (Montúfar et al. 2014; Serra et al. 2018)
     --------------------------------------------------
     For a network  x ∈ R^{n_0} → R^{n_L}  with hidden layers of widths
-    n_1, …, n_{L-1}, the maximal number of linear regions is:
+    n_1, …, n_{L-1}, an architecture-level upper bound is:
 
         R = Π_{l=1}^{L-1}  Σ_{j=0}^{min(n_l, n_0)}  C(n_l, j)
 
@@ -713,7 +715,7 @@ def generic_linear_region_count(
     Returns
     -------
     int
-        The generic (maximal) number of linear regions.
+        An integer architecture-level upper bound on linear regions.
 
     Examples
     --------
@@ -722,7 +724,7 @@ def generic_linear_region_count(
     >>> generic_linear_region_count([2, 3, 1])    # 2D input, one hidden layer of 3
     7
     >>> generic_linear_region_count([1, 2, 2, 1]) # 1D input, two hidden layers of 2
-    8
+    9
     """
     if connectivity is not None:
         raise NotImplementedError(
@@ -798,8 +800,9 @@ def linear_region_upper_bound_tight(
 
 def score_conv_expressivity(n: int, k: int, C: int) -> int:
     """
-    Computes the exact maximum number of linear regions for a 1D Conv layer.
-    Accounts for the Toeplitz block-matrix structure of the spatial weight sharing.
+    Computes a deterministic sampled arrangement proxy for a 1D Conv layer.
+    Uses one Toeplitz weight sample; it does not maximize over all filters
+    and must not be interpreted as an exact architecture-level maximum.
     
     Parameters
     ----------
@@ -823,10 +826,10 @@ def score_conv_expressivity(n: int, k: int, C: int) -> int:
         return 1
         
     # Generic weights
-    np.random.seed(42)  
+    rng = np.random.default_rng(42)
     W = np.zeros((C * m, n))
     for c in range(C):
-        filter_w = np.random.randn(k)
+        filter_w = rng.standard_normal(k)
         for i in range(m):
             W[c * m + i, i:i+k] = filter_w
             
