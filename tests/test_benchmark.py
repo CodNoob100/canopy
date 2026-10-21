@@ -224,6 +224,12 @@ class TestCreateBenchmark:
         bench = create_benchmark(data_path=None, synthetic_fallback=True)
         assert isinstance(bench, SyntheticBenchmark)
 
+    def test_default_requires_real_benchmark_data(self, monkeypatch):
+        """Missing real data must not silently produce synthetic correlations."""
+        monkeypatch.delenv("NATS_BENCH_TSS_PATH", raising=False)
+        with pytest.raises(FileNotFoundError, match="NATS-Bench"):
+            create_benchmark()
+
     def test_no_fallback_raises(self):
         with pytest.raises(FileNotFoundError, match="NATS-Bench"):
             create_benchmark(

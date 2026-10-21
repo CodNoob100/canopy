@@ -53,8 +53,10 @@ class DARTSBenchmarkWrapper:
         try:
             acc = self.performance_model.model.query(full_config)
         except Exception as e:
-            logger.error(f"Failed to query model: {e}")
-            acc = 10.0
+            raise RuntimeError(
+                "NAS-Bench-301 surrogate query failed; cannot substitute "
+                "a fixed value for actual accuracy."
+            ) from e
             
         return MockEntry(test_accuracy=acc, params=p_count)
 
