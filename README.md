@@ -7,9 +7,9 @@ CANOPY is a training-free Neural Architecture Search (NAS) framework that rigoro
 
 Existing zero-cost proxies (like parameter count or kernel matrix rank) correlate with test accuracy empirically but lack theoretical justification for *why* they measure capacity. CANOPY is derived from the exact mathematical equivalence between ReLU networks and **tropical rational functions**. 
 
-CANOPY scores an architecture by calculating the number of maximal cells in its corresponding tropical hypersurface - directly quantifying the exact number of distinct linear regions (expressivity) the architecture can produce.
+CANOPY ranks architectures using training-free **expressivity bounds and structural proxies** motivated by tropical geometry. The weight-free score is a theoretical region-count bound, **not** the exact number of linear regions realized by particular network weights; DARTS uses a heuristic log-scale structural score.
 
-On NAS-Bench-301 (a search space of $10^{18}$ DARTS architectures), CANOPY achieves a Spearman rank correlation of $\rho = 0.51$, a 56% relative improvement over standard parameter count ($\rho = 0.33$).
+The repository reports a Spearman rank correlation of $\rho = 0.51$ on a NAS-Bench-301 DARTS evaluation, versus $\rho = 0.33$ for the parameter-count baseline (about 55% relative improvement). These reported values have **not** been independently reproduced as part of this maintenance update; see the evaluation scripts and supply the relevant benchmark data/models to reproduce them.
 
 ## Key Results
 
@@ -25,7 +25,7 @@ CANOPY outperforms baseline proxies by correctly capturing the architectural exp
 
 ## Installation
 
-CANOPY requires Python 3.10+ and PyTorch.
+CANOPY requires Python 3.10+, NumPy, and SciPy for the core library. PyTorch and pycddlib are not required for the current core code paths. Evaluation/plotting and NATS-Bench integrations require additional optional dependencies.
 
 ```bash
 git clone https://github.com/CodNoob100/canopy.git
@@ -46,12 +46,12 @@ Score a simple feedforward architecture's expressivity directly from its layer w
 from canopy.nas.architecture import ArchitectureSpec
 from canopy.nas.tropical_score import tropical_expressivity_score
 
-# Define an architecture with 3 hidden layers of widths [64, 128, 64]
-arch = ArchitectureSpec(layer_widths=(64, 128, 64))
+# Define input dimension 32, 3 hidden layers [64, 128, 64], and output dimension 10
+arch = ArchitectureSpec(layer_widths=(32, 64, 128, 64, 10))
 
-# Calculate the exact tropical expressivity score (log10 of the number of linear regions)
+# Compute a generic region-count upper-bound proxy (integer count, not log10)
 score = tropical_expressivity_score(arch, mode="generic")
-print(f"Log10 Linear Regions: {score:.2f}")
+print(f"Generic linear-region bound: {score}")
 ```
 
 Score a DARTS architecture (with convolutional and skip-connection branches) using the Toeplitz arrangement and Minkowski sum proxy bounds:
@@ -72,6 +72,17 @@ ops = (
 arch = ArchitectureSpec(layer_widths=[32, 32, 32, 32, 32], cell_ops=ops)
 darts_score = tropical_expressivity_score_darts(arch)
 print(f"DARTS Proxy Expressivity Score: {darts_score:.2f}")
+```
+
+To run evaluation and plotting utilities (including the example scripts that import pandas or matplotlib):
+```bash
+pip install -e '.[eval]'
+```
+
+To run the development test suite:
+```bash
+pip install -e '.[dev,eval]'
+python -m pytest
 ```
 
 ## Running the Examples
