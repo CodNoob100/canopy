@@ -177,12 +177,36 @@ class NATSBenchAPI:
         )
         cost = self._api.get_cost_info(index, self.dataset, hp=self.hp)
 
+        # Do not turn missing real-world accuracy/cost measurements into
+        # valid-looking 0.0 baselines (the old .get(..., 0.0) behavior).
+        required = (
+            (info, "test-accuracy"),
+            (cost, "params"),
+            (cost, "flops"),
+        )
+        for record, key in required:
+            if key not in record or record[key] is None:
+                raise ValueError(
+                    f"Missing real NATS-Bench {key!r} for architecture {index}"
+                )
+            number = float(record[key])
+            if not np.isfinite(number):
+                raise ValueError(
+                    f"Non-finite NATS-Bench {key!r} for architecture {index}"
+                )
+            if (key == "test-accuracy" and not 0 <= number <= 100) or (
+                key != "test-accuracy" and number < 0
+            ):
+                raise ValueError(
+                    f"Invalid NATS-Bench {key!r} for architecture {index}"
+                )
+
         entry = BenchmarkEntry(
             arch=arch,
-            test_accuracy=info.get("test-accuracy", 0.0),
+            test_accuracy=float(info["test-accuracy"]),
             valid_accuracy=info.get("valid-accuracy", 0.0),
-            params=cost.get("params", 0.0),
-            flops=cost.get("flops", 0.0),
+            params=float(cost["params"]),
+            flops=float(cost["flops"]),
             index=index,
             arch_str=arch_str,
             dataset=self.dataset,
