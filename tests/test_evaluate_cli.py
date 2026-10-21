@@ -154,3 +154,68 @@ def test_undefined_statistics_not_reported_as_zero():
     assert cli._finite_or_none(float("nan")) is None
     assert cli._finite_or_none(float("inf")) is None
     assert cli._finite_or_none(0) == 0.0
+
+
+@pytest.mark.parametrize(
+    "incomplete_info,incomplete_cost",
+    [
+        ({}, {"params": 1, "flops": 2}),
+        ({"test-accuracy": 90}, {"flops": 2}),
+        ({"test-accuracy": float("nan")}, {"params": 1, "flops": 2}),
+        ({"test-accuracy": 150}, {"params": 1, "flops": 2}),
+        ({"test-accuracy": 90}, {"params": -1, "flops": 2}),
+    ],
+)
+def test_real_adapter_refuses_missing_invalid_metrics(
+    tmp_path, monkeypatch, incomplete_info, incomplete_cost,
+):
+    """Adapter must not silently fill unknown real measurements with zero."""
+    import sys
+    import types
+    from canopy.nas.benchmark import NATSBenchAPI
+
+    class FakeUnderlyingNats:
+        def arch(self, index):
+            return "|none~0|+|none~0|none~1|+|none~0|none~1|none~2|"
+
+        def get_more_info(self, *args, **kwargs):
+            return incomplete_info
+
+        def get_cost_info(self, *args, **kwargs):
+            return incomplete_cost
+
+    monkeypatch.setitem(
+        sys.modules, "nats_bench",
+        types.SimpleNamespace(create=lambda *args, **kwargs: FakeUnderlyingNats()),
+    )
+    data_path = tmp_path / "known"
+    data_path.write_bytes(b"stand-in data")
+    api = NATSBenchAPI(str(data_path), dataset="cifar10", hp="200")
+    with pytest.raises(ValueError, match="NATS-Bench"):
+        api.query_by_index(0)
+
+
+def test_real_adapter_preserves_genuine_zero_accuracy(tmp_path, monkeypatch):
+    import sys
+    import types
+    from canopy.nas.benchmark import NATSBenchAPI
+
+    class FakeUnderlyingNats:
+        def arch(self, index):
+            return "|none~0|+|none~0|none~1|+|none~0|none~1|none~2|"
+
+        def get_more_info(self, *args, **kwargs):
+            return {"test-accuracy": 0.0, "valid-accuracy": 0.0}
+
+        def get_cost_info(self, *args, **kwargs):
+            return {"params": 1.0, "flops": 2.0}
+
+    monkeypatch.setitem(
+        sys.modules, "nats_bench",
+        types.SimpleNamespace(create=lambda *args, **kwargs: FakeUnderlyingNats()),
+    )
+    data_path = tmp_path / "known"
+    data_path.write_bytes(b"stand-in data")
+    entry = NATSBenchAPI(str(data_path), dataset="cifar10", hp="200").query_by_index(0)
+    assert entry.test_accuracy == 0.0
+    assert entry.params == 1.0
