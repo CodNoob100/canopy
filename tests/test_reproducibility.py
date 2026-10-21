@@ -108,3 +108,31 @@ def test_checksum_is_explicitly_not_verified(tmp_path):
 def test_invalid_checksum_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="benchmark_sha256"):
         make_runner(tmp_path, benchmark_sha256="unverified")
+
+
+def test_missing_benchmark_entries_are_null_not_zero(tmp_path):
+    runner = make_runner(tmp_path)
+    runner.benchmark = type(
+        "NoCoverageBenchmark", (), {"query_by_arch": lambda self, arch: None}
+    )()
+    out = runner.run_seed(8)
+
+    for name, metrics in out.items():
+        assert metrics["final_true_accuracy"] is None
+        assert metrics["missing_benchmark_lookups"] == metrics["total_evaluations"]
+        assert all(value is None for value in metrics["trajectory_accuracy"])
+        assert not any(metrics["trajectory_lookup_available"])
+
+
+def test_true_zero_is_distinct_from_missing(tmp_path):
+    runner = make_runner(tmp_path)
+    runner.benchmark = type(
+        "ZeroAccuracyBenchmark", (), {
+            "query_by_arch": lambda self, arch: type("Entry", (), {"test_accuracy": 0.0})()
+        }
+    )()
+    metrics = runner.run_seed(8)["random"]
+    assert metrics["final_true_accuracy"] == 0.0
+    assert all(value == 0.0 for value in metrics["trajectory_accuracy"])
+    assert all(metrics["trajectory_lookup_available"])
+    assert metrics["missing_benchmark_lookups"] == 0
