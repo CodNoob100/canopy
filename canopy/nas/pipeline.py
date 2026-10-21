@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any, Callable
+from typing import List, Callable
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,15 @@ class MultiStagePipeline:
             filter_keep_ratio: The fraction of architectures to keep after Stage 1.
             proxy_keep_top_k: The absolute number of architectures to fully train after Stage 2.
         """
+        if not 0.0 < filter_keep_ratio <= 1.0:
+            raise ValueError("filter_keep_ratio must be in (0, 1].")
+        if (
+            isinstance(proxy_keep_top_k, bool)
+            or not isinstance(proxy_keep_top_k, int)
+            or proxy_keep_top_k < 1
+        ):
+            raise ValueError("proxy_keep_top_k must be a positive integer.")
+
         self.score_fn = score_fn
         self.proxy_train_fn = proxy_train_fn
         self.full_train_fn = full_train_fn
@@ -45,6 +54,9 @@ class MultiStagePipeline:
         """Runs the 3-stage NAS pipeline."""
         candidates = [ArchitectureCandidate(arch_id=str(i), arch_str=arch) for i, arch in enumerate(search_space_candidates)]
         total = len(candidates)
+        if total == 0:
+            logger.info("No candidates to evaluate; returning no finalists.")
+            return []
         
         # ==========================================
         # STAGE 1: TROPICAL PRE-FILTER
