@@ -438,7 +438,7 @@ def kendall_tau(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
     """
     n = len(ranking_a)
     if n < 2:
-        return 1.0
+        return float("nan")
 
     concordant = 0
     discordant = 0
@@ -453,7 +453,9 @@ def kendall_tau(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
                 discordant += 1
 
     denom = n * (n - 1) / 2
-    return (concordant - discordant) / denom if denom > 0 else 0.0
+    if concordant + discordant == 0:
+        return float("nan")
+    return (concordant - discordant) / denom if denom > 0 else float("nan")
 
 
 def spearman_rho(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
@@ -469,7 +471,7 @@ def spearman_rho(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
     std_a = np.sqrt(np.sum((r_a - mean_a) ** 2))
     std_b = np.sqrt(np.sum((r_b - mean_b) ** 2))
     if std_a < 1e-12 or std_b < 1e-12:
-        return 0.0
+        return float("nan")
     return float(cov / (std_a * std_b))
 
 
@@ -480,7 +482,8 @@ def top_k_accuracy(
 ) -> float:
     """Fraction of the true top-K found in the predicted top-K."""
     n = len(predicted_scores)
-    k = min(k, n)
+    if n <= k:
+        return float("nan")
     true_top_k = set(np.argsort(true_scores)[-k:])
     pred_top_k = set(np.argsort(predicted_scores)[-k:])
     return len(true_top_k & pred_top_k) / k
@@ -531,12 +534,8 @@ def compare_metrics(
         "tropical_tight": np.array([
             tropical_expressivity_score(a, mode="tight") for a in archs
         ], dtype=float),
-        "param_count": np.array([
-            _param_count_score(a) for a in archs
-        ]),
-        "flops": np.array([
-            _flops_score(a) for a in archs
-        ]),
+        "param_count": np.array([e.params for e in entries], dtype=float),
+        "flops": np.array([e.flops for e in entries], dtype=float),
         "random": np.array([
             _random_score(a, rng) for a in archs
         ]),
