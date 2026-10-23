@@ -219,3 +219,37 @@ def test_real_adapter_preserves_genuine_zero_accuracy(tmp_path, monkeypatch):
     entry = NATSBenchAPI(str(data_path), dataset="cifar10", hp="200").query_by_index(0)
     assert entry.test_accuracy == 0.0
     assert entry.params == 1.0
+
+
+def test_measured_resource_baselines_are_independent(monkeypatch):
+    import numpy as np
+    import canopy.nas.benchmark as mod
+
+    arch = NASBench201SearchSpace().index_to_arch(0)
+    entries = [
+        BenchmarkEntry(arch=arch, index=i, test_accuracy=float(i),
+                       valid_accuracy=0.0, params=float(i), flops=float(5 - i))
+        for i in range(4)
+    ]
+
+    class Fixture:
+        def get_all(self, **kwargs):
+            return entries
+
+    monkeypatch.setattr(mod, "tropical_expressivity_score", lambda *a, **kw: 1)
+    result = {r.metric_name: r for r in mod.compare_metrics(Fixture())}
+    assert result["param_count"].spearman_rho == pytest.approx(1.0)
+    assert result["flops"].spearman_rho == pytest.approx(-1.0)
+
+
+def test_undefined_rank_statistics_and_top_k():
+    import numpy as np
+    from canopy.nas.benchmark import kendall_tau, spearman_rho, top_k_accuracy
+
+    constant = np.ones(12)
+    increasing = np.arange(12)
+    assert np.isnan(spearman_rho(constant, increasing))
+    assert np.isnan(kendall_tau(constant, increasing))
+    assert np.isnan(top_k_accuracy(increasing, increasing, k=50))
+    assert np.isnan(top_k_accuracy(increasing, increasing, k=12))
+    assert top_k_accuracy(increasing, increasing, k=10) == 1.0
