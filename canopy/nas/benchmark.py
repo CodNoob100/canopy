@@ -177,12 +177,36 @@ class NATSBenchAPI:
         )
         cost = self._api.get_cost_info(index, self.dataset, hp=self.hp)
 
+        # Do not turn missing real-world accuracy/cost measurements into
+        # valid-looking 0.0 baselines (the old .get(..., 0.0) behavior).
+        required = (
+            (info, "test-accuracy"),
+            (cost, "params"),
+            (cost, "flops"),
+        )
+        for record, key in required:
+            if key not in record or record[key] is None:
+                raise ValueError(
+                    f"Missing real NATS-Bench {key!r} for architecture {index}"
+                )
+            number = float(record[key])
+            if not np.isfinite(number):
+                raise ValueError(
+                    f"Non-finite NATS-Bench {key!r} for architecture {index}"
+                )
+            if (key == "test-accuracy" and not 0 <= number <= 100) or (
+                key != "test-accuracy" and number < 0
+            ):
+                raise ValueError(
+                    f"Invalid NATS-Bench {key!r} for architecture {index}"
+                )
+
         entry = BenchmarkEntry(
             arch=arch,
-            test_accuracy=info.get("test-accuracy", 0.0),
+            test_accuracy=float(info["test-accuracy"]),
             valid_accuracy=info.get("valid-accuracy", 0.0),
-            params=cost.get("params", 0.0),
-            flops=cost.get("flops", 0.0),
+            params=float(cost["params"]),
+            flops=float(cost["flops"]),
             index=index,
             arch_str=arch_str,
             dataset=self.dataset,
@@ -407,30 +431,39 @@ def _random_score(arch: ArchitectureSpec, rng: np.random.Generator) -> float:
 # ---------------------------------------------------------------------------
 
 def kendall_tau(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
-    """
-    Kendall's τ rank correlation coefficient.
+    """Kendall's tau-b, accounting for tied ranks in either variable.
 
-    τ = (concordant - discordant) / (n*(n-1)/2)
+    Undefined for fewer than two observations or when either ranking is
+    constant. The O(n^2) implementation is bounded by the CLI sample cap.
     """
     n = len(ranking_a)
+    if n != len(ranking_b):
+        raise ValueError("Rankings must have the same length")
     if n < 2:
-        return 1.0
+        return float("nan")
 
     concordant = 0
     discordant = 0
+    ties_a = 0
+    ties_b = 0
     for i in range(n):
         for j in range(i + 1, n):
             a_diff = ranking_a[i] - ranking_a[j]
             b_diff = ranking_b[i] - ranking_b[j]
-            product = a_diff * b_diff
-            if product > 0:
+            if a_diff == 0:
+                ties_a += 1
+            if b_diff == 0:
+                ties_b += 1
+            if a_diff > 0 and b_diff > 0 or a_diff < 0 and b_diff < 0:
                 concordant += 1
-            elif product < 0:
+            elif a_diff > 0 and b_diff < 0 or a_diff < 0 and b_diff > 0:
                 discordant += 1
 
-    denom = n * (n - 1) / 2
-    return (concordant - discordant) / denom if denom > 0 else 0.0
-
+    pairs = n * (n - 1) // 2
+    denominator = np.sqrt(float(pairs - ties_a) * float(pairs - ties_b))
+    if denominator == 0:
+        return float("nan")
+    return float((concordant - discordant) / denominator)
 
 def spearman_rho(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
     """Spearman's ρ via Pearson correlation on ranks."""
@@ -445,7 +478,7 @@ def spearman_rho(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
     std_a = np.sqrt(np.sum((r_a - mean_a) ** 2))
     std_b = np.sqrt(np.sum((r_b - mean_b) ** 2))
     if std_a < 1e-12 or std_b < 1e-12:
-        return 0.0
+        return float("nan")
     return float(cov / (std_a * std_b))
 
 
@@ -456,7 +489,8 @@ def top_k_accuracy(
 ) -> float:
     """Fraction of the true top-K found in the predicted top-K."""
     n = len(predicted_scores)
-    k = min(k, n)
+    if n <= k:
+        return float("nan")
     true_top_k = set(np.argsort(true_scores)[-k:])
     pred_top_k = set(np.argsort(predicted_scores)[-k:])
     return len(true_top_k & pred_top_k) / k
@@ -507,12 +541,8 @@ def compare_metrics(
         "tropical_tight": np.array([
             tropical_expressivity_score(a, mode="tight") for a in archs
         ], dtype=float),
-        "param_count": np.array([
-            _param_count_score(a) for a in archs
-        ]),
-        "flops": np.array([
-            _flops_score(a) for a in archs
-        ]),
+        "param_count": np.array([e.params for e in entries], dtype=float),
+        "flops": np.array([e.flops for e in entries], dtype=float),
         "random": np.array([
             _random_score(a, rng) for a in archs
         ]),

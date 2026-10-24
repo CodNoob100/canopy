@@ -93,7 +93,17 @@ class TestKendallTau:
         assert -0.3 < tau < 0.3
 
     def test_single_element(self):
-        assert kendall_tau(np.array([1.0]), np.array([2.0])) == 1.0
+        # A single observation cannot define a rank correlation.
+        assert np.isnan(kendall_tau(np.array([1.0]), np.array([2.0])))
+
+    def test_ties_use_tau_b_not_tau_a(self):
+        a = np.array([1.0, 1.0, 2.0])
+        b = np.array([1.0, 2.0, 2.0])
+        assert kendall_tau(a, b) == pytest.approx(0.5)
+
+    def test_constant_ranking_is_undefined(self):
+        assert np.isnan(kendall_tau(np.ones(3), np.arange(3.0)))
+
 
 
 class TestSpearmanRho:
