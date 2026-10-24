@@ -93,5 +93,31 @@ python examples/run_evaluation.py
 python examples/run_darts_search_trajectory.py --seeds 10
 ```
 
+### NAS-Bench-301 model download
+
+The optional model downloader now **requires a SHA-256 digest checked
+independently against a trusted model release** before installing the archive.
+We have not independently verified an official checksum for the linked archive
+and intentionally do not bundle an unverified value. Do not use a checksum
+copied from the same untrusted download as proof of authenticity.
+
+```bash
+# Obtain VERIFIED_SHA256 from a trusted upstream release or independent source
+python examples/download_nb301_models.py --sha256 "VERIFIED_SHA256"
+```
+
+For an archive you have already obtained:
+
+```bash
+python examples/download_nb301_models.py \\
+  --archive "/path/to/nb301_models.zip" \\
+  --sha256 "VERIFIED_SHA256" \\
+  --dest "/path/to/nb301_models"
+```
+
+The downloader rejects unsafe archive paths and unsupported file types, applies
+size and compression-ratio limits, and will not overwrite an existing model
+directory. Models are not downloaded merely by importing the script.
+
 ## License
 This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
