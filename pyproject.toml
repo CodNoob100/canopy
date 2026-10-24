@@ -23,7 +23,7 @@ dev = [
 # Optional dependencies for downstream integrations; the core scoring code
 # only requires NumPy and SciPy.
 torch = ["torch>=2.0"]
-geometry = ["pycddlib>=2.1"]
+geometry = ["pycddlib>=3.0.2"]
 bench = [
     "nats-bench>=1.8",
 ]
