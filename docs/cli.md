@@ -53,7 +53,13 @@ unsafe serialization formats; do not load archives from untrusted sources.
 The report is written to a **new** output directory as
 `benchmark_comparison.json` and contains the benchmark metadata,
 sample seed and indices, and Spearman/Kendall/top-K comparisons.
-Undefined correlations appear as JSON null, not fabricated zeros.
+Rank correlation uses tie-aware Kendall tau-b and Spearman rho. Undefined
+correlations (constant rankings or fewer than two samples) appear as JSON
+`null`, not fabricated zeros. Top-K overlap is also `null` when the sample
+contains K or fewer architectures, since selecting every candidate would
+otherwise produce a misleading 100% score. Parameter-count and FLOPs
+baselines use the benchmark's measured resource values, not architecture
+proxies.
 
 This retrospective test-accuracy evaluation does not prove CANOPY's
 NAS-Bench-301 claims or constitute training a neural architecture. It
