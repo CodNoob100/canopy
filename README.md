@@ -25,7 +25,7 @@ CANOPY outperforms baseline proxies by correctly capturing the architectural exp
 
 ## Installation
 
-CANOPY requires Python 3.10+ and PyTorch.
+CANOPY's core scoring tools require Python 3.10+, NumPy, and SciPy. PyTorch and pycddlib are available as optional extras for downstream integrations; neither is needed to run the core scoring API.
 
 ```bash
 git clone https://github.com/CodNoob100/canopy.git
