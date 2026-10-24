@@ -431,32 +431,39 @@ def _random_score(arch: ArchitectureSpec, rng: np.random.Generator) -> float:
 # ---------------------------------------------------------------------------
 
 def kendall_tau(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
-    """
-    Kendall's τ rank correlation coefficient.
+    """Kendall's tau-b, accounting for tied ranks in either variable.
 
-    τ = (concordant - discordant) / (n*(n-1)/2)
+    Undefined for fewer than two observations or when either ranking is
+    constant. The O(n^2) implementation is bounded by the CLI sample cap.
     """
     n = len(ranking_a)
+    if n != len(ranking_b):
+        raise ValueError("Rankings must have the same length")
     if n < 2:
         return float("nan")
 
     concordant = 0
     discordant = 0
+    ties_a = 0
+    ties_b = 0
     for i in range(n):
         for j in range(i + 1, n):
             a_diff = ranking_a[i] - ranking_a[j]
             b_diff = ranking_b[i] - ranking_b[j]
-            product = a_diff * b_diff
-            if product > 0:
+            if a_diff == 0:
+                ties_a += 1
+            if b_diff == 0:
+                ties_b += 1
+            if a_diff > 0 and b_diff > 0 or a_diff < 0 and b_diff < 0:
                 concordant += 1
-            elif product < 0:
+            elif a_diff > 0 and b_diff < 0 or a_diff < 0 and b_diff > 0:
                 discordant += 1
 
-    denom = n * (n - 1) / 2
-    if concordant + discordant == 0:
+    pairs = n * (n - 1) // 2
+    denominator = np.sqrt(float(pairs - ties_a) * float(pairs - ties_b))
+    if denominator == 0:
         return float("nan")
-    return (concordant - discordant) / denom if denom > 0 else float("nan")
-
+    return float((concordant - discordant) / denominator)
 
 def spearman_rho(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
     """Spearman's ρ via Pearson correlation on ranks."""
