@@ -30,7 +30,7 @@ bench = [
 eval = [
     "pandas>=2.0",
     "matplotlib>=3.10.9",
-    "seaborn>=0.12",
+    "seaborn>=0.13.2",
 ]
 
 [project.scripts]
