@@ -57,3 +57,73 @@ def test_cli_version(capsys):
         main(["--version"])
     assert exit_result.value.code == 0
     assert "CANOPY" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["", "2", "0,0", "2,0,1", "2,-1,1", "-3,4", "2,wat,1", "2,,1", "2.5,3", ",", "2,4,"],
+)
+def test_cli_rejects_invalid_widths_with_usage_error(bad, capsys):
+    with pytest.raises(SystemExit) as exit_result:
+        main(["score", f"--widths={bad}"])
+    assert exit_result.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "--widths" in captured.err
+    assert "positive" in captured.err or "at least" in captured.err
+
+
+def test_cli_rejects_missing_widths_value(capsys):
+    with pytest.raises(SystemExit) as exit_result:
+        main(["score", "--widths"])
+    assert exit_result.value.code == 2
+    assert "--widths" in capsys.readouterr().err
+
+
+def test_cli_rejects_bad_scoring_mode_message(capsys):
+    with pytest.raises(SystemExit) as exit_result:
+        main(["score", "--widths", "2,4,1", "--mode", "unknown"])
+    assert exit_result.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "--mode" in captured.err
+    assert "generic" in captured.err and "tight" in captured.err
+
+
+def test_cli_requires_a_command(capsys):
+    with pytest.raises(SystemExit) as exit_result:
+        main([])
+    assert exit_result.value.code == 2
+    assert capsys.readouterr().out == ""
+
+
+def test_cli_rejects_unknown_command(capsys):
+    with pytest.raises(SystemExit) as exit_result:
+        main(["bogus"])
+    assert exit_result.value.code == 2
+    assert "bogus" in capsys.readouterr().err
+
+
+def test_cli_version_matches_package_version(capsys):
+    from canopy import __version__
+
+    with pytest.raises(SystemExit) as exit_result:
+        main(["--version"])
+    assert exit_result.value.code == 0
+    assert __version__ in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("mode", ["generic", "tight"])
+def test_json_output_schema_keys(mode, capsys):
+    assert main(["score", "--widths", "2,4,4,1", "--mode", mode, "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert set(result) == {
+        "canopy_version",
+        "layer_widths",
+        "mode",
+        "score",
+        "score_units",
+        "score_interpretation",
+    }
+    assert result["mode"] == mode
+    assert isinstance(result["score"], str) and result["score"].isdecimal()
