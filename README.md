@@ -6,6 +6,12 @@
 
 CANOPY is **research software** for training-free neural architecture search (NAS). It explores architecture-level combinatorial **upper bounds** on ReLU linear regions and heuristic structural proxies motivated by tropical geometry. An architecture's bound is **not** the number of regions realized by a particular initialized or trained model, nor is it a guarantee of predictive performance.
 
+## Start here: two paths
+
+**New to CANOPY?** Follow the [CPU-only beginner quickstart](docs/getting-started.md#path-a--first-result-in-minutes) to set up a virtual environment, install the package, and score your first architecture without benchmark data. Run `python -m canopy.cli doctor` to check core installation readiness.
+
+**Power developer?** Follow the [granular developer workflow](docs/getting-started.md#path-b--granular-reproducible-developer-workflow) for tests, Python API usage, provenance-aware real-data evaluation, and troubleshooting.
+
 ## Implemented interfaces and evidence
 
 | Interface | What it computes | Interpretation |
