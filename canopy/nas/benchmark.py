@@ -468,11 +468,13 @@ def kendall_tau(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
 def spearman_rho(ranking_a: np.ndarray, ranking_b: np.ndarray) -> float:
     """Spearman's ρ via Pearson correlation on ranks."""
     from scipy.stats import rankdata
+    if len(ranking_a) != len(ranking_b):
+        raise ValueError("Rankings must have the same length")
     r_a = rankdata(ranking_a)
     r_b = rankdata(ranking_b)
     n = len(r_a)
     if n < 2:
-        return 1.0
+        return float("nan")
     mean_a, mean_b = r_a.mean(), r_b.mean()
     cov = np.sum((r_a - mean_a) * (r_b - mean_b))
     std_a = np.sqrt(np.sum((r_a - mean_a) ** 2))
@@ -489,6 +491,10 @@ def top_k_accuracy(
 ) -> float:
     """Fraction of the true top-K found in the predicted top-K."""
     n = len(predicted_scores)
+    if n != len(true_scores):
+        raise ValueError("Rankings must have the same length")
+    if k <= 0:
+        raise ValueError("k must be a positive integer")
     if n <= k:
         return float("nan")
     true_top_k = set(np.argsort(true_scores)[-k:])
