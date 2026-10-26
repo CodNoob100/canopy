@@ -159,6 +159,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"CANOPY {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("doctor", help="Check core installation and CLI readiness")
     score = commands.add_parser(
         "score", help="Score feedforward ReLU layer widths without training"
     )
@@ -194,6 +195,35 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "doctor":
+        import importlib.metadata
+        import sys
+        import numpy
+        import scipy
+
+        print(f"CANOPY {__version__}")
+        print(f"Python {sys.version.split()[0]}")
+        print(f"NumPy {numpy.__version__}")
+        print(f"SciPy {scipy.__version__}")
+        try:
+            installed = importlib.metadata.version("canopy")
+        except importlib.metadata.PackageNotFoundError:
+            print("Package metadata: unavailable (source checkout or incomplete installation)")
+        else:
+            print(f"Installed package: canopy {installed}")
+        from canopy.nas.architecture import ArchitectureSpec
+        from canopy.nas.tropical_score import tropical_expressivity_score
+
+        bound = tropical_expressivity_score(
+            ArchitectureSpec(layer_widths=(2, 4, 1)), mode="generic"
+        )
+        if not isinstance(bound, int) or bound <= 0:
+            print("Core scoring smoke check: FAILED")
+            return 1
+        print("Core scoring smoke check: OK")
+        print("Real benchmark data: not checked (optional)")
+        return 0
+
     if args.command == "score":
         from canopy.nas.architecture import ArchitectureSpec
         from canopy.nas.tropical_score import tropical_expressivity_score
