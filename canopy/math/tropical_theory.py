@@ -816,7 +816,8 @@ def score_conv_expressivity(n: int, k: int, C: int) -> int:
     Returns
     -------
     int
-        The maximum number of linear regions the Conv layer can produce.
+        Number of cells in the sampled hyperplane arrangement. This is a
+        deterministic proxy, not a proven maximum over convolution filters.
     """
     import numpy as np
     from itertools import combinations
