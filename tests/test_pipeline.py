@@ -59,3 +59,22 @@ def test_stage_order_and_finalist_ranking():
     assert trained == ["3", "4"]
     assert [candidate.arch_str for candidate in finalists] == ["4", "3"]
     assert [candidate.final_accuracy for candidate in finalists] == [8, 6]
+
+
+def test_single_candidate_runs_each_stage_once():
+    calls = []
+
+    def record(stage, value):
+        calls.append((stage, value))
+        return 1.0
+
+    pipeline = MultiStagePipeline(
+        score_fn=lambda value: record("score", value),
+        proxy_train_fn=lambda value: record("proxy", value),
+        full_train_fn=lambda value: record("full", value),
+        filter_keep_ratio=0.1,
+        proxy_keep_top_k=5,
+    )
+    finalists = pipeline.run(["only"])
+    assert [candidate.arch_str for candidate in finalists] == ["only"]
+    assert calls == [("score", "only"), ("proxy", "only"), ("full", "only")]
