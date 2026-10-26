@@ -39,3 +39,14 @@ jobs:
 
       - name: Run test suite
         run: python -m pytest -q
+
+      - name: Verify clean virtualenv quickstart (core only)
+        shell: bash
+        run: |
+          python -m venv .quickstart-venv
+          .quickstart-venv/bin/python -m pip install --upgrade pip
+          .quickstart-venv/bin/python -m pip install .
+          cd "$(mktemp -d)"
+          "$GITHUB_WORKSPACE/.quickstart-venv/bin/python" -m canopy.cli --version
+          "$GITHUB_WORKSPACE/.quickstart-venv/bin/python" -m canopy.cli score --widths 2,4,1
+          "$GITHUB_WORKSPACE/.quickstart-venv/bin/python" -m canopy.cli score --widths 2,64,64,1 --mode tight --json
