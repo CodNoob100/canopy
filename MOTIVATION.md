@@ -1,37 +1,33 @@
-# The Motivation Behind CANOPY
+# Why CANOPY studies tropical geometry for neural architecture search
 
-Neural Architecture Search (NAS) promises to automate the design of deep learning models. However, training thousands of candidate architectures to convergence to find the best one requires massive, often prohibitive, computational resources.
+Neural architecture search (NAS) explores network designs, but fully training every candidate can be expensive. **Training-free proxies** offer inexpensive rankings before full training. Common baselines include parameter count, FLOPs and measures derived from gradients or activations. These scores can be useful, but no proxy is universally guaranteed to predict held-out accuracy.
 
-To solve this, the community turned to **Training-Free (Zero-Cost) Proxies**. These are fast heuristics-like parameter count, FLOPs, gradient flow (Synflow), or Jacobian covariance (Jacov/NASWOT)-that can score an architecture's potential at initialization, without training any weights.
+## Mathematical motivation, not an exact architecture-level measurement
 
-### The Problem with Existing Proxies
+Piecewise-linear networks such as ReLU networks admit mathematical descriptions related to tropical algebra and geometry. [Zhang, Naitzat and Lim (ICML 2018)](https://proceedings.mlr.press/v80/zhang18i.html) establish a relationship between classes of ReLU networks and tropical rational maps under the paper's conditions and relate linear regions to associated polyhedral structures. [Montúfar et al. (NeurIPS 2014)](https://papers.nips.cc/paper_files/paper/2014/hash/fa6f2a469cc4d61a92d96e74617c3d2a-Abstract.html) study theoretical linear-region complexity. These mathematical results **do not imply** that layer widths alone determine the exact number of linear regions formed by a particular trained network.
 
-While existing zero-cost proxies correlate empirically with trained performance in constrained settings, they all share a fundamental weakness: **they lack a direct mathematical connection to representational capacity.** 
+CANOPY uses that motivation to explore fast architectural scoring:
 
-- **The Parameter Count Failure**: In DARTS, many architectures with identical parameter counts - including skip-heavy topologies with low actual expressivity - are ranked equally by parameter-based metrics. A proxy based purely on parameter count cannot differentiate between a useful wide convolution and a redundant dense skip connection.
+- **Feedforward architecture-only bounds.** [`generic_linear_region_count`](canopy/math/tropical_theory.py) combines Zaslavsky-style hyperplane-arrangement factors by layer width; [`linear_region_upper_bound_tight`](canopy/math/tropical_theory.py) introduces bottleneck awareness. Both return combinatorial integer **upper bounds**, not exact realized counts.
+- **Weight-aware region counting.** [`count_linear_regions`](canopy/geometry/cell_counter.py) includes algorithms selected by network size and method. Results may be exact or estimated; they depend on instantiated weights and the chosen method.
+- **Convolutional and skip-connection proxies.** [`tropical_expressivity_score_darts`](canopy/nas/tropical_score.py) uses simplifying structural assumptions for DARTS-style operations. It reports a **log10-scale heuristic proxy**, not an exact maximum over convolution filters or a validated measure of true network expressivity.
 
-### The Solution: Tropical Geometry
+## Research questions
 
-The question we asked was: *Is there a training-free NAS metric that measures expressivity directly, with a mathematical proof connecting the score to the network's representational capacity?*
+The project explores whether theoretically motivated architectural features correlate with independent benchmark outcomes, whether they add information beyond parameter/FLOPs baselines, and whether tighter combinatorial bounds improve rankings. The answers are **empirical questions**, not consequences of the tropical representation theorems.
 
-The answer lies in **Tropical Geometry**. A foundational theorem (Zhang et al. 2018; Maragos et al. 2021) establishes an exact mathematical equivalence: **every feedforward ReLU network computes exactly a tropical rational function**. 
+### The historical 'bound-tightness paradox' hypothesis
 
-This means that the number of distinct linear regions a ReLU network can express (its true expressivity) is exactly equal to the number of maximal cells in the corresponding tropical hypersurface. 
+Earlier project text and figures suggest that some looser structural bounds may produce better rankings than some tighter ones because they indirectly encode architecture density. This is a **historical project hypothesis**, not a general mathematical theorem or a demonstrated, independently replicated empirical conclusion. A meaningful test must define the compared bounds, datasets, split/sample selection, seeds, uncertainty and independent baselines.
 
-### CANOPY: Expressivity as a Metric
+Historical visualizations are included in [`results/`](results/). The previously reported DARTS Spearman rho figures (0.51 versus 0.33) are **not yet tied to a fully verified, reproducible external-data/model run** in this repository. They should not be described as confirmed evidence of superiority.
 
-CANOPY is the first training-free NAS metric built entirely on this tropical equivalence. Instead of guessing performance using gradients or parameter counts, CANOPY calculates the architecture's exact theoretical expressivity.
+## How to evaluate the hypothesis responsibly
 
-To make this work on real-world NAS benchmarks, CANOPY introduces critical mathematical extensions to the tropical framework:
-1. **Convolutional Extension**: We use Zaslavsky's theorem on Toeplitz-structured hyperplane arrangements to map spatial weight sharing.
-2. **Residual Skip Connections**: We model the addition of identity pathways via the Minkowski sum of Newton polytopes and normal fan refinements.
+Use [the real-data evaluation CLI](docs/cli.md) with a trusted NATS-Bench TSS artifact, record the sampled indices, benchmark identity, versioned environment, score units, seeds and raw outputs, and evaluate rank metrics with appropriate handling of ties and undefined cases. Treat synthetic benchmark accuracies as simulation, never as independent target labels: the simulator itself can depend on the tropical score.
 
-### Key Finding: The Bound Tightness Paradox
+For DARTS/NAS-Bench-301, use separately installed, appropriately versioned surrogate models; surrogate-predicted accuracy is **not** accuracy measured by retraining each candidate. Record the model version, configuration, sampling procedure and all baseline assumptions before making claims.
 
-While building CANOPY, we discovered a highly counter-intuitive phenomenon we call the **Bound Tightness Paradox**. 
+See the [README](README.md) for the user-facing API summary, the [evidence ledger](docs/research-evidence.md) for known verification limits, and [issue #29](https://github.com/CodNoob100/canopy/issues/29) for pending trusted-real-data integration validation.
 
-When calculating the expressivity bounds of neural networks, mathematicians strive for "tighter" bounds-formulas that get closer to the exact number of linear regions. However, we found empirically that **mathematically tighter bounds produce worse NAS rankings**.
-
-Why? Because the "looseness" of the generic bounds (like the classic Montúfar bound or the Cartesian product bound for skip connections) actually acts as a high-fidelity proxy for network density. In search spaces where density correlates with accuracy, this mathematical "error" becomes statistically beneficial. 
-
-This paradox fundamentally shifts how we think about NAS metric design: we should evaluate expressivity proxies based on their ranking quality, not just their mathematical tightness.
+**Scope:** CANOPY is an exploratory research framework. The current tested implementation is not evidence, by itself, that a particular architecture score will select a better trained model.
