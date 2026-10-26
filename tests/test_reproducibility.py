@@ -138,6 +138,28 @@ def test_true_zero_is_distinct_from_missing(tmp_path):
     assert metrics["missing_benchmark_lookups"] == 0
 
 
+def test_entry_with_missing_accuracy_remains_unknown(tmp_path):
+    """An entry may exist without a usable accuracy measurement."""
+    runner = make_runner(tmp_path)
+    runner.benchmark = type(
+        "MissingAccuracyBenchmark", (), {
+            "query_by_arch": lambda self, arch: type("Entry", (), {"test_accuracy": None})()
+        }
+    )()
+    result = runner.run_seed(8)["random"]
+    assert result["final_true_accuracy"] is None
+    assert result["missing_benchmark_lookups"] == result["total_evaluations"]
+    assert all(value is None for value in result["trajectory_accuracy"])
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -1.0, 100.1])
+def test_invalid_numeric_accuracy_rejected(tmp_path, value):
+    runner = make_runner(tmp_path)
+    entry = type("Entry", (), {"test_accuracy": value})()
+    with pytest.raises(ValueError, match="Benchmark test accuracy"):
+        runner._observed_accuracy(entry)
+
+
 def test_darts_example_fitness_override_forwards_seed(tmp_path):
     """The DARTS script must work with ExperimentRunner.run_seed(seed=...)."""
     from examples.run_darts_search_trajectory import configure_darts_fitness
