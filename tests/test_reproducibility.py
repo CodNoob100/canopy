@@ -136,3 +136,18 @@ def test_true_zero_is_distinct_from_missing(tmp_path):
     assert all(value == 0.0 for value in metrics["trajectory_accuracy"])
     assert all(metrics["trajectory_lookup_available"])
     assert metrics["missing_benchmark_lookups"] == 0
+
+
+def test_darts_example_fitness_override_forwards_seed(tmp_path):
+    """The DARTS script must work with ExperimentRunner.run_seed(seed=...)."""
+    from examples.run_darts_search_trajectory import configure_darts_fitness
+
+    runner = make_runner(tmp_path)
+    configure_darts_fitness(runner)
+
+    first = runner._get_fitness_fn("random", seed=23)
+    second = runner._get_fitness_fn("random", seed=23)
+    other = runner._get_fitness_fn("random", seed=24)
+    assert first(None) == second(None)
+    assert first(None) != other(None)
+    assert callable(runner._get_fitness_fn("tropical_generic", seed=23))
