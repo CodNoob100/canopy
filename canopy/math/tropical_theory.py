@@ -826,11 +826,12 @@ def score_conv_expressivity(n: int, k: int, C: int) -> int:
     if m <= 0:
         return 1
         
-    # Generic weights
-    rng = np.random.default_rng(42)
+    # Preserve the legacy seed-42 filter sequence without reseeding NumPy's
+    # process-global RNG (default_rng would change established proxy values).
+    rng = np.random.RandomState(42)
     W = np.zeros((C * m, n))
     for c in range(C):
-        filter_w = rng.standard_normal(k)
+        filter_w = rng.randn(k)
         for i in range(m):
             W[c * m + i, i:i+k] = filter_w
             
