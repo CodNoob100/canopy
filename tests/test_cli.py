@@ -127,3 +127,13 @@ def test_json_output_schema_keys(mode, capsys):
     }
     assert result["mode"] == mode
     assert isinstance(result["score"], str) and result["score"].isdecimal()
+
+
+def test_doctor_reports_core_readiness(capsys):
+    assert main(["doctor"]) == 0
+    output = capsys.readouterr().out
+    assert "Core scoring smoke check: OK" in output
+    assert "Real benchmark data: not checked (optional)" in output
+    assert "Python " in output
+    assert "NumPy " in output
+    assert "SciPy " in output
