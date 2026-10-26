@@ -242,6 +242,22 @@ def test_measured_resource_baselines_are_independent(monkeypatch):
     assert result["flops"].spearman_rho == pytest.approx(-1.0)
 
 
+def test_singleton_spearman_is_undefined_and_bad_rank_inputs_fail():
+    import numpy as np
+    from canopy.nas.benchmark import kendall_tau, spearman_rho, top_k_accuracy
+
+    assert np.isnan(spearman_rho(np.array([1]), np.array([2])))
+    assert np.isnan(spearman_rho(np.array([]), np.array([])))
+    with pytest.raises(ValueError, match="same length"):
+        spearman_rho(np.array([1, 2]), np.array([1]))
+    with pytest.raises(ValueError, match="same length"):
+        kendall_tau(np.array([1, 2]), np.array([1]))
+    with pytest.raises(ValueError, match="same length"):
+        top_k_accuracy(np.array([1, 2]), np.array([1]), k=1)
+    with pytest.raises(ValueError, match="positive integer"):
+        top_k_accuracy(np.array([1, 2]), np.array([1, 2]), k=0)
+
+
 def test_undefined_rank_statistics_and_top_k():
     import numpy as np
     from canopy.nas.benchmark import kendall_tau, spearman_rho, top_k_accuracy
