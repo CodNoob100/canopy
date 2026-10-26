@@ -23,6 +23,12 @@ CANOPY outperforms baseline proxies by correctly capturing the architectural exp
 |:---:|:---:|
 | ![CIFAR-100 Correlation](results/rank_correlation_cifar100.png) | ![Paradox Mechanism](results/paradox_mechanism.png) |
 
+## Start here: two paths
+
+**Just trying CANOPY?** Follow the [five-minute, CPU-only quickstart](docs/getting-started.md#path-a--first-result-in-minutes) to create a virtual environment, install the core package, and score your first architecture without any benchmark files or GPU.
+
+**Building on CANOPY?** Use the [granular developer route](docs/getting-started.md#path-b--granular-reproducible-developer-workflow) for isolated tests, Python API examples, real-data evaluation, provenance, and troubleshooting.
+
 ## Installation
 
 CANOPY's core scoring tools require Python 3.10+, NumPy, and SciPy. PyTorch and pycddlib are available as optional extras for downstream integrations; neither is needed to run the core scoring API.
