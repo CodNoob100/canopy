@@ -76,7 +76,7 @@ print(f"DARTS Proxy Expressivity Score: {darts_score:.2f}")
 
 ## Running the Examples
 
-You can reproduce the paper's NATS-Bench and DARTS trajectory evaluations using the provided scripts in the `examples/` directory.
+You can run the repository's NATS-Bench and DARTS evaluations using the scripts in `examples/`. **Real benchmark data/models are required to make empirical accuracy claims.** SyntheticBenchmark is useful for software testing, but it generates accuracies from the tropical score and cannot independently validate that score.
 
 ### NATS-Bench Evaluation
 ```bash

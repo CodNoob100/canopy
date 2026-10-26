@@ -31,9 +31,11 @@ def run_evaluation(num_samples=5000):
         models_1_0_dir = os.path.expanduser("~/nb301_models")
         performance_model = nb.load_ensemble(models_1_0_dir) 
     except Exception as e:
-        logger.warning(f"NAS-Bench-301 API or models not available ({e}).")
-        logger.warning("Falling back to simulated DARTS structural evaluation...")
-        performance_model = None
+        raise RuntimeError(
+            "NAS-Bench-301 and its surrogate models are required for a real "
+            "DARTS evaluation. Install nasbench301 and provide the models "
+            "under ~/nb301_models; synthetic accuracies are not a valid fallback."
+        ) from e
 
     rng = np.random.default_rng(42)
     
@@ -101,10 +103,9 @@ def run_evaluation(num_samples=5000):
                 
                 acc = performance_model.model.query(full_config)
             except Exception as e:
-                logger.error(f"Failed to query model: {e}")
-                acc = 10.0
-        else:
-            acc = 10.0
+                raise RuntimeError(
+                    f"NAS-Bench-301 surrogate query failed for sample {i}."
+                ) from e
         
         accuracies.append(acc)
         
