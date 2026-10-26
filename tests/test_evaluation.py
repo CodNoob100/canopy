@@ -33,7 +33,17 @@ def test_experiment_runner(tmp_path):
     csv_files = list(tmp_path.glob("*.csv"))
     json_files = list(tmp_path.glob("*.json"))
     assert len(csv_files) == 1
-    assert len(json_files) == 1
+    assert len(json_files) == 2
+    manifest_file = next(tmp_path.glob("experiment_manifest_*.json"))
+    with open(manifest_file, encoding="utf-8") as f:
+        import json
+        manifest = json.load(f)
+    assert manifest["benchmark"]["kind"] == "synthetic"
+    assert manifest["benchmark"]["accuracy_source"] == "synthetic_simulation"
+    assert manifest["configuration"]["seeds"] == [0]
+    assert manifest["configuration"]["fitness"]["tropical_generic"]["units"] == "count_bound"
+    assert (tmp_path / manifest["files"]["results_json"]).exists()
+    assert (tmp_path / manifest["files"]["trajectory_csv"]).exists()
     
     # Verify CSV format
     df = pd.read_csv(csv_files[0])

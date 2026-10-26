@@ -359,7 +359,7 @@ def create_benchmark(
     dataset: str = "cifar10",
     hp: str = "200",
     *,
-    synthetic_fallback: bool = True,
+    synthetic_fallback: bool = False,
     n_synthetic: int = 500,
     seed: int = 42,
 ):
@@ -367,7 +367,8 @@ def create_benchmark(
     Create a benchmark instance.
 
     Attempts to use real NATS-Bench data if `data_path` is provided
-    and the file exists.  Falls back to SyntheticBenchmark otherwise.
+    and the file exists. Requires real data by default; synthetic
+    test data are used only with explicit synthetic_fallback=True.
 
     Parameters
     ----------
@@ -377,7 +378,9 @@ def create_benchmark(
     dataset : str
     hp : str
     synthetic_fallback : bool
-        If True, use synthetic benchmark when real data is unavailable.
+        Explicit test-only opt-in to synthetic data if real data are unavailable.
+        Defaults to False to prevent synthetic accuracy from being
+        mistaken for real benchmark results.
     n_synthetic : int
         Number of architectures for the synthetic benchmark.
     seed : int

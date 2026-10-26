@@ -109,86 +109,105 @@ class EvolutionarySearch:
         max_evaluations: Optional[int] = None,
     ) -> SearchResult:
         """
-        Run the evolutionary search.
+        Run evolutionary search with a strict limit on *unique* fitness calls.
 
-        Parameters
-        ----------
-        callback : callable, optional
-            Called after each generation with (generation, stats_dict).
-        max_evaluations : int, optional
-            Stop early if total evaluations exceed this.
-
-        Returns
-        -------
-        SearchResult
+        Duplicate architectures are retrieved from the cache without
+        consuming evaluation budget. If a budget is exhausted during
+        population initialization or a generation, return the best
+        evaluated candidates without scoring any unevaluated offspring.
         """
+        if self.population_size < 1:
+            raise ValueError("population_size must be positive")
+        if self.tournament_size < 1:
+            raise ValueError("tournament_size must be positive")
+        if max_evaluations is not None and (
+            isinstance(max_evaluations, bool)
+            or not isinstance(max_evaluations, int)
+            or max_evaluations < 1
+        ):
+            raise ValueError("max_evaluations must be a positive integer or None")
+
         rng = np.random.default_rng(self.seed)
         t_start = time.perf_counter()
 
-        # Cache: arch → score
         cache: Dict[ArchitectureSpec, float] = {}
         total_evals = 0
+
+        class EvaluationBudgetReached(Exception):
+            """Internal signal that no new unique score may be computed."""
 
         def evaluate(arch: ArchitectureSpec) -> float:
             nonlocal total_evals
             if arch not in cache:
+                if max_evaluations is not None and total_evals >= max_evaluations:
+                    raise EvaluationBudgetReached
                 if self.fitness_fn is not None:
                     cache[arch] = self.fitness_fn(arch)
                 else:
-                    cache[arch] = float(tropical_expressivity_score(
-                        arch, mode=self.scoring_mode
-                    ))
+                    cache[arch] = float(
+                        tropical_expressivity_score(arch, mode=self.scoring_mode)
+                    )
                 total_evals += 1
             return cache[arch]
 
-        # Initialize population
-        population: List[ArchitectureSpec] = [
-            self.search_space.random(rng)
-            for _ in range(self.population_size)
-        ]
-        scores = [evaluate(a) for a in population]
-
-        history: List[Dict] = []
-        n_elite = max(1, int(self.elite_ratio * self.population_size))
-
-        for gen in range(self.n_generations):
-            if max_evaluations and total_evals >= max_evaluations:
+        # Evaluate initial candidates one at a time. The budget can be
+        # smaller than population_size, so initialization may be partial.
+        population: List[ArchitectureSpec] = []
+        scores: List[float] = []
+        for _ in range(self.population_size):
+            arch = self.search_space.random(rng)
+            try:
+                score = evaluate(arch)
+            except EvaluationBudgetReached:
+                break
+            population.append(arch)
+            scores.append(score)
+            if max_evaluations is not None and total_evals >= max_evaluations:
                 break
 
-            # Sort by score (descending — higher is more expressive)
+        history: List[Dict] = []
+        n_elite = max(1, int(self.elite_ratio * len(population)))
+
+        for gen in range(self.n_generations):
+            if max_evaluations is not None and total_evals >= max_evaluations:
+                break
+
             ranked = sorted(
                 zip(population, scores), key=lambda x: x[1], reverse=True
             )
-
-            # Elitism: keep top n_elite
             elites = [a for a, _ in ranked[:n_elite]]
             elite_scores = [s for _, s in ranked[:n_elite]]
 
-            # Generate offspring
             offspring: List[ArchitectureSpec] = []
-            n_offspring = self.population_size - n_elite
+            offspring_scores: List[float] = []
+            n_offspring = len(population) - n_elite
 
             for _ in range(n_offspring):
                 if rng.random() < self.mutation_rate:
-                    # Mutation
-                    parent = self._tournament_select(
-                        population, scores, rng
-                    )
+                    parent = self._tournament_select(population, scores, rng)
                     child = self.search_space.mutate(parent, rng)
                 else:
-                    # Crossover
                     p1 = self._tournament_select(population, scores, rng)
                     p2 = self._tournament_select(population, scores, rng)
                     child = self.search_space.crossover(p1, p2, rng)
+
+                try:
+                    child_score = evaluate(child)
+                except EvaluationBudgetReached:
+                    break
                 offspring.append(child)
+                offspring_scores.append(child_score)
 
-            offspring_scores = [evaluate(a) for a in offspring]
+                if max_evaluations is not None and total_evals >= max_evaluations:
+                    break
 
-            # New population = elites + offspring
-            population = elites + offspring
-            scores = elite_scores + offspring_scores
+            # A partial generation keeps the un-replaced parents; otherwise
+            # we would drop good candidates and shrink the population.
+            unfilled = n_offspring - len(offspring)
+            retained = ranked[n_elite : n_elite + unfilled]
+            population = elites + offspring + [a for a, _ in retained]
+            scores = elite_scores + offspring_scores + [s for _, s in retained]
 
-            # Stats
             stats = {
                 "generation": gen,
                 "best_score": max(scores),
@@ -199,23 +218,20 @@ class EvolutionarySearch:
                 "cache_size": len(cache),
             }
             history.append(stats)
-
             if callback:
                 callback(gen, stats)
 
-        # Final ranking
-        ranked = sorted(
-            zip(population, scores), key=lambda x: x[1], reverse=True
-        )
-        best_arch, best_score = ranked[0]
-        wall_time = time.perf_counter() - t_start
+            if max_evaluations is not None and total_evals >= max_evaluations:
+                break
 
+        ranked = sorted(zip(population, scores), key=lambda x: x[1], reverse=True)
+        best_arch, best_score = ranked[0]
         return SearchResult(
             best_arch=best_arch,
             best_score=best_score,
             history=history,
             total_evaluations=total_evals,
-            wall_time_seconds=wall_time,
+            wall_time_seconds=time.perf_counter() - t_start,
             population_final=ranked,
         )
 
@@ -227,7 +243,8 @@ class EvolutionarySearch:
     ) -> ArchitectureSpec:
         """Select the best of k random candidates."""
         indices = rng.choice(
-            len(population), size=self.tournament_size, replace=False
+            len(population), size=min(self.tournament_size, len(population)),
+            replace=False,
         )
         best_idx = max(indices, key=lambda i: scores[i])
         return population[best_idx]

@@ -3,13 +3,13 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 
-CANOPY is a training-free Neural Architecture Search (NAS) framework that rigorously grounds zero-cost proxy scoring in tropical geometry. 
+CANOPY is a research-oriented, training-free Neural Architecture Search (NAS) framework that uses tropical geometry to motivate zero-cost expressivity proxies. 
 
 Existing zero-cost proxies (like parameter count or kernel matrix rank) correlate with test accuracy empirically but lack theoretical justification for *why* they measure capacity. CANOPY is derived from the exact mathematical equivalence between ReLU networks and **tropical rational functions**. 
 
-CANOPY scores an architecture by calculating the number of maximal cells in its corresponding tropical hypersurface - directly quantifying the exact number of distinct linear regions (expressivity) the architecture can produce.
+For architecture-only scoring, CANOPY computes combinatorial bounds and structural proxies for linear-region expressivity. These are **not** exact counts of the regions formed by an untrained network. The weight-aware mode can count or estimate regions for an instantiated network, depending on the counting method.
 
-On NAS-Bench-301 (a search space of $10^{18}$ DARTS architectures), CANOPY achieves a Spearman rank correlation of $\rho = 0.51$, a 56% relative improvement over standard parameter count ($\rho = 0.33$).
+The repository reports a Spearman rank correlation of $\rho = 0.51$ for its DARTS proxy on NAS-Bench-301, compared with $\rho = 0.33$ for its parameter-count baseline (a reported 56% relative improvement). Reproducing this result requires the relevant benchmark models and evaluation setup.
 
 ## Key Results
 
@@ -46,15 +46,15 @@ Score a simple feedforward architecture's expressivity directly from its layer w
 from canopy.nas.architecture import ArchitectureSpec
 from canopy.nas.tropical_score import tropical_expressivity_score
 
-# Define an architecture with 3 hidden layers of widths [64, 128, 64]
-arch = ArchitectureSpec(layer_widths=(64, 128, 64))
+# Input width 32, 3 hidden layers [64, 128, 64], output width 10
+arch = ArchitectureSpec(layer_widths=(32, 64, 128, 64, 10))
 
-# Calculate the exact tropical expressivity score (log10 of the number of linear regions)
+# 'generic' returns an integer upper bound, not a log10 score or exact count
 score = tropical_expressivity_score(arch, mode="generic")
-print(f"Log10 Linear Regions: {score:.2f}")
+print(f"Architecture-level region upper bound: {score}")
 ```
 
-Score a DARTS architecture (with convolutional and skip-connection branches) using the Toeplitz arrangement and Minkowski sum proxy bounds:
+Score a DARTS architecture with an approximate convolutional and skip-connection structural proxy (returned in log10 scale):
 
 ```python
 from canopy.nas.architecture import ArchitectureSpec
@@ -69,14 +69,14 @@ ops = (
     "none", "none"
 )
 
-arch = ArchitectureSpec(layer_widths=[32, 32, 32, 32, 32], cell_ops=ops)
+arch = ArchitectureSpec(layer_widths=(32, 32, 32, 32, 32), cell_ops=ops)
 darts_score = tropical_expressivity_score_darts(arch)
 print(f"DARTS Proxy Expressivity Score: {darts_score:.2f}")
 ```
 
 ## Running the Examples
 
-You can reproduce the paper's NATS-Bench and DARTS trajectory evaluations using the provided scripts in the `examples/` directory.
+You can run the repository's NATS-Bench and DARTS evaluations using the scripts in `examples/`. **Real benchmark data/models are required to make empirical accuracy claims.** SyntheticBenchmark is useful for software testing, but it generates accuracies from the tropical score and cannot independently validate that score.
 
 ### NATS-Bench Evaluation
 ```bash
@@ -92,6 +92,32 @@ python examples/run_evaluation.py
 # Run a 10-seed evolutionary search over the DARTS search space
 python examples/run_darts_search_trajectory.py --seeds 10
 ```
+
+### NAS-Bench-301 model download
+
+The optional model downloader now **requires a SHA-256 digest checked
+independently against a trusted model release** before installing the archive.
+We have not independently verified an official checksum for the linked archive
+and intentionally do not bundle an unverified value. Do not use a checksum
+copied from the same untrusted download as proof of authenticity.
+
+```bash
+# Obtain VERIFIED_SHA256 from a trusted upstream release or independent source
+python examples/download_nb301_models.py --sha256 "VERIFIED_SHA256"
+```
+
+For an archive you have already obtained:
+
+```bash
+python examples/download_nb301_models.py \\
+  --archive "/path/to/nb301_models.zip" \\
+  --sha256 "VERIFIED_SHA256" \\
+  --dest "/path/to/nb301_models"
+```
+
+The downloader rejects unsafe archive paths and unsupported file types, applies
+size and compression-ratio limits, and will not overwrite an existing model
+directory. Models are not downloaded merely by importing the script.
 
 ## License
 This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.

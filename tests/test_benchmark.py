@@ -234,6 +234,24 @@ class TestCreateBenchmark:
         bench = create_benchmark(data_path=None, synthetic_fallback=True)
         assert isinstance(bench, SyntheticBenchmark)
 
+    def test_default_requires_real_benchmark_data(self, monkeypatch):
+        """Missing real data must not silently produce synthetic correlations."""
+        monkeypatch.delenv("NATS_BENCH_TSS_PATH", raising=False)
+        with pytest.raises(FileNotFoundError, match="NATS-Bench"):
+            create_benchmark()
+
+    def test_real_data_load_error_is_not_silently_simulated(self, tmp_path, monkeypatch):
+        """An existing but unreadable benchmark must fail, not fabricate results."""
+        invalid_file = tmp_path / "corrupt-benchmark.bin"
+        invalid_file.write_bytes(b"not NATS-Bench data")
+
+        def fail_to_load(*args, **kwargs):
+            raise ValueError("invalid benchmark archive")
+
+        monkeypatch.setattr("canopy.nas.benchmark.NATSBenchAPI", fail_to_load)
+        with pytest.raises(ValueError, match="invalid benchmark archive"):
+            create_benchmark(data_path=str(invalid_file))
+
     def test_no_fallback_raises(self):
         with pytest.raises(FileNotFoundError, match="NATS-Bench"):
             create_benchmark(

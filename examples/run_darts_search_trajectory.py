@@ -53,8 +53,10 @@ class DARTSBenchmarkWrapper:
         try:
             acc = self.performance_model.model.query(full_config)
         except Exception as e:
-            logger.error(f"Failed to query model: {e}")
-            acc = 10.0
+            raise RuntimeError(
+                "NAS-Bench-301 surrogate query failed; cannot substitute "
+                "a fixed value for actual accuracy."
+            ) from e
             
         return MockEntry(test_accuracy=acc, params=p_count)
 
@@ -82,6 +84,19 @@ def run_significance_test(csv_path: str):
     else:
         print("\n  [SIGNIFICANCE TEST] Not enough data or mismatched seeds to run Wilcoxon.")
 
+def configure_darts_fitness(runner):
+    """Use the DARTS proxy while preserving the runner's seeded fitness API."""
+    original_get_fitness = runner._get_fitness_fn
+
+    def custom_get_fitness(strategy, *, seed=None):
+        if strategy == "tropical_generic":
+            from canopy.nas.tropical_score import tropical_expressivity_score_darts
+            return lambda arch: float(tropical_expressivity_score_darts(arch))
+        return original_get_fitness(strategy, seed=seed)
+
+    runner._get_fitness_fn = custom_get_fitness
+
+
 def main():
     parser = argparse.ArgumentParser(description="CANOPY Evaluation Pipeline - DARTS Search Trajectories")
     parser.add_argument("--budget", type=int, default=150, help="Max evaluations per search")
@@ -107,14 +122,8 @@ def main():
         output_dir=args.output,
     )
     
-    # Override the default tropical fitness with the DARTS specific one
-    original_get_fitness = runner._get_fitness_fn
-    def custom_get_fitness(strategy):
-        if strategy == "tropical_generic":
-            from canopy.nas.tropical_score import tropical_expressivity_score_darts
-            return lambda arch: float(tropical_expressivity_score_darts(arch))
-        return original_get_fitness(strategy)
-    runner._get_fitness_fn = custom_get_fitness
+    # Preserve per-seed random baselines when overriding the DARTS score.
+    configure_darts_fitness(runner)
     
     runner.run_all(n_seeds=args.seeds)
     
