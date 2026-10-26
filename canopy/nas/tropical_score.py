@@ -11,8 +11,9 @@ canopy.geometry into a single callable with the signature:
 This is what the NAS search loop calls to evaluate candidate architectures.
 
 Two modes:
-    1. Weight-free (default):  Uses the Montúfar/Serra formula.
-       O(L) time, no weights needed, computes the *generic* region count.
+    1. Weight-free (default):  Uses combinatorial region-count bounds.
+       No weights needed; computes an architecture-level *upper bound*,
+       not the exact region count for a specific network.
     2. Weight-aware:  Instantiates random weights and counts exact/approximate
        linear regions using the Phase 2 cell-counting kernel.
 """
@@ -42,10 +43,11 @@ def tropical_expressivity_score(
     seed: Optional[int] = None,
 ) -> int:
     """
-    Compute the tropical expressivity score for an architecture.
+    Compute a region-count-based expressivity score for NAS.
 
-    This is the fitness function for NAS.  Returns the (exact or estimated)
-    number of linear regions the architecture can produce.
+    Generic/tight modes return integer architecture-level upper bounds.
+    Weight-aware mode returns an exact count or estimate, depending on
+    the chosen counting method and computational limits.
 
     Parameters
     ----------
@@ -53,8 +55,8 @@ def tropical_expressivity_score(
         The architecture to score.
     mode : str
         Scoring mode:
-        - 'generic':  Montúfar formula.  Fastest.  O(L).
-        - 'tight':    Serra et al. tight bound with bottleneck awareness.
+        - 'generic':  Zaslavsky-product upper bound.
+        - 'tight':    Bottleneck-aware upper bound.
         - 'weight_aware':  Instantiate weights and count regions.
     weights, biases : list of ndarray, optional
         Explicit weights for 'weight_aware' mode.  If None, random
@@ -70,7 +72,7 @@ def tropical_expressivity_score(
     Returns
     -------
     int
-        The expressivity score (linear region count or bound).
+        Integer upper bound, exact count, or estimate, depending on mode.
     """
     if mode == "generic":
         return generic_linear_region_count(list(arch.layer_widths))
