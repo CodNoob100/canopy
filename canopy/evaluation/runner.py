@@ -5,6 +5,7 @@ Evaluation runner for benchmarking expressivity-guided NAS against baselines.
 import os
 import json
 import platform
+import math
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -209,6 +210,19 @@ class ExperimentRunner:
             "files": output_files,
         }
 
+    @staticmethod
+    def _observed_accuracy(entry) -> Optional[float]:
+        """Keep unavailable accuracies unknown; reject invalid measurements."""
+        if entry is None:
+            return None
+        raw = getattr(entry, "test_accuracy", None)
+        if raw is None:
+            return None
+        accuracy = float(raw)
+        if not math.isfinite(accuracy) or not 0.0 <= accuracy <= 100.0:
+            raise ValueError("Benchmark test accuracy must be finite and in [0, 100]")
+        return accuracy
+
     def run_seed(self, seed: int) -> Dict[str, Any]:
         """Run all strategies for a single random seed."""
         results = {}
@@ -234,7 +248,7 @@ class ExperimentRunner:
             
             def tracking_fitness(arch):
                 entry = self.benchmark.query_by_arch(arch)
-                true_acc = float(entry.test_accuracy) if entry is not None else None
+                true_acc = self._observed_accuracy(entry)
                 eval_true_accs.append(true_acc)
                 
                 if original_fitness_fn:
@@ -258,9 +272,7 @@ class ExperimentRunner:
                 cum_max_accs.append(best_seen)
 
             best_entry = self.benchmark.query_by_arch(search_result.best_arch)
-            final_true_acc = (
-                float(best_entry.test_accuracy) if best_entry is not None else None
-            )
+            final_true_acc = self._observed_accuracy(best_entry)
 
             results[strategy] = {
                 "final_true_accuracy": final_true_acc,
