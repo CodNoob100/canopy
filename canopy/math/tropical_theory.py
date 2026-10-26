@@ -834,9 +834,12 @@ def score_conv_expressivity(n: int, k: int, C: int) -> int:
         for i in range(m):
             W[c * m + i, i:i+k] = filter_w
             
-    regions = 0
-    # zaslavsky over independent subsets
-    for j in range(n + 1):
+    # The empty subset has rank zero and contributes exactly one cell.
+    # Do not call np.linalg.matrix_rank on a zero-row matrix: some NumPy
+    # versions raise on the empty singular-value reduction.
+    regions = 1
+    # Zaslavsky proxy over nonempty independent row subsets.
+    for j in range(1, n + 1):
         for sub_indices in combinations(range(C * m), j):
             if np.linalg.matrix_rank(W[list(sub_indices)]) == j:
                 regions += 1
