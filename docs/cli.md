@@ -20,10 +20,10 @@ mislabeling it as a log10 count.
 The score is a **decimal string** in JSON, avoiding precision loss with very
 large combinatorial integers in downstream JavaScript and JSON consumers.
 
-This feature scores feedforward ReLU architectures only. Evaluation against
-real NAS-Bench datasets, DARTS proxy scoring, and experiment manifests remain
-distinct future interfaces. Do not interpret synthetic accuracies as real
-benchmark validation.
+The `score` subcommand covers feedforward ReLU architectures; the separate
+`evaluate` subcommand below compares scores against real NATS-Bench TSS data.
+DARTS proxy scoring and experiment manifests remain separate interfaces.
+Do not interpret synthetic accuracies as real benchmark validation.
 
 ## Real NATS-Bench evaluation
 
