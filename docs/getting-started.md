@@ -24,6 +24,7 @@ Then run the same commands on any platform:
 python -m pip install --upgrade pip
 python -m pip install -e .
 python -m canopy.cli --version
+python -m canopy.cli doctor
 python -m canopy.cli score --widths 2,4,1
 ```
 
