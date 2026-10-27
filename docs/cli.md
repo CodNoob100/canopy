@@ -29,6 +29,22 @@ Both return **integer architecture-level upper bounds** (`count_bound`), not log
 
 `--json` includes `canopy_version`, `layer_widths`, `mode`, `score`, `score_units` and `score_interpretation`. The potentially large integer `score` is a **decimal string** to avoid JavaScript/JSON precision loss.
 
+### Expected output and invalid-input behavior
+
+For `canopy score --widths 2,4,1 --mode generic`, the plain-text output is `11 (architecture-level region-count upper bound, generic)`. With `--json`, the `score` field is the decimal **string** `"11"`, and `score_units` is `"count_bound"` (not a measured accuracy or log10 value). The `tight` mode also returns a count bound; its value can differ from `generic`.
+
+The following are intentionally **invalid**; they print an `argparse` usage error to standard error, produce no score on standard output, and exit with status **2**:
+
+```bash
+canopy score --widths 2,0,1       # zero width
+canopy score --widths 2,-1,1      # negative width
+canopy score --widths 2,wat,1     # non-integer width
+canopy score --widths 2          # missing output width
+canopy score --widths 2,4,1 --mode exact  # unsupported mode
+```
+
+A missing `--widths`, missing subcommand, or unknown subcommand likewise exits with status 2. These cases are covered by [`tests/test_cli.py`](../tests/test_cli.py); none requires benchmark assets.
+
 ## `canopy evaluate`: explicitly supplied real NATS-Bench TSS data
 
 Get a trusted **TSS/topology** artifact from the [official NATS-Bench repository](https://github.com/D-X-Y/NATS-Bench). Use either its extracted `NATS-tss-v1_0-3ffb9-simple` directory or the matching `NATS-tss-v1_0-3ffb9.pickle.pbz2` file. The CLI does not download the data and never silently generates synthetic accuracies.
