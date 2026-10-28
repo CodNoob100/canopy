@@ -73,11 +73,13 @@ def download_archive(
 
     digest = hashlib.sha256()
     total = 0
+    created_output = False
     try:
         with urllib.request.build_opener(_HTTPSOnlyRedirectHandler()).open(url, timeout=60) as response:
             if urllib.parse.urlsplit(response.geturl()).scheme != "https":
                 raise ValueError("Model download redirected to a non-HTTPS URL")
             with destination.open("xb") as output:
+                created_output = True
                 while chunk := response.read(BUFFER_SIZE):
                     total += len(chunk)
                     if total > max_bytes:
@@ -87,7 +89,9 @@ def download_archive(
         if digest.hexdigest() != expected:
             raise ValueError("Model archive SHA-256 mismatch; refusing to extract")
     except Exception:
-        destination.unlink(missing_ok=True)
+        # Never delete a pre-existing file if exclusive creation failed.
+        if created_output:
+            destination.unlink(missing_ok=True)
         raise
 
 
