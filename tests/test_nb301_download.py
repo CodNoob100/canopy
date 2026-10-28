@@ -195,3 +195,53 @@ def test_importing_downloader_never_uses_network(monkeypatch):
     monkeypatch.setattr(urllib.request, "build_opener", fail_network)
     downloader = Path(__file__).resolve().parents[1] / "examples" / "download_nb301_models.py"
     runpy.run_path(str(downloader), run_name="offline_import_check")
+
+
+def test_download_preserves_preexisting_target_on_exclusive_open_failure(tmp_path, monkeypatch):
+    """A failed xb open must not unlink someone else's existing file."""
+    import urllib.request
+
+    class Response(io.BytesIO):
+        def geturl(self):
+            return "https://example.test/models.zip"
+
+    class Opener:
+        def open(self, url, timeout):
+            return Response(b"download")
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *args: Opener())
+    target = tmp_path / "existing.zip"
+    target.write_bytes(b"important existing data")
+    with pytest.raises(FileExistsError):
+        download_archive(
+            "https://example.test/models.zip", target,
+            expected_sha256=hashlib.sha256(b"download").hexdigest(),
+        )
+    assert target.read_bytes() == b"important existing data"
+
+
+def test_interrupted_download_removes_only_new_partial_target(tmp_path, monkeypatch):
+    """A stream failure after exclusive creation must clean the partial file."""
+    import urllib.request
+
+    class InterruptedResponse(io.BytesIO):
+        def geturl(self):
+            return "https://example.test/models.zip"
+
+        def read(self, size=-1):
+            if self.tell() >= 3:
+                raise OSError("simulated interrupted transfer")
+            return super().read(3)
+
+    class Opener:
+        def open(self, url, timeout):
+            return InterruptedResponse(b"abcdef")
+
+    monkeypatch.setattr(urllib.request, "build_opener", lambda *args: Opener())
+    target = tmp_path / "partial.zip"
+    with pytest.raises(OSError, match="interrupted transfer"):
+        download_archive(
+            "https://example.test/models.zip", target,
+            expected_sha256=hashlib.sha256(b"abcdef").hexdigest(),
+        )
+    assert not target.exists()
