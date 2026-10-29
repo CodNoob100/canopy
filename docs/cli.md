@@ -1,6 +1,26 @@
-# CANOPY scoring CLI
+# CANOPY command-line interface
 
-The `canopy` command is installed with CANOPY (`pip install -e .`).
+The `canopy` console script is installed from [`pyproject.toml`](../pyproject.toml). Its three subcommands serve separate purposes: `doctor` checks the local core installation without external data, `score` computes feedforward architecture-level bounds **without training**, and `evaluate` compares scores against an **explicitly provided** NATS-Bench topology-search-space (TSS) benchmark.
+
+## Installation
+
+```bash
+python -m pip install -e .
+# Additionally needed for real TSS benchmark access
+python -m pip install -e '.[bench]'
+```
+
+The first command installs NumPy and SciPy. The optional `bench` extra installs the `nats-bench` API, **not** its external benchmark data. The `eval` extra adds plotting/analysis libraries for example scripts, and does not change the CLI's benchmark trust policy.
+
+## `canopy doctor`: offline installation check
+
+```bash
+python -m canopy.cli doctor
+```
+
+This prints CANOPY, Python, NumPy and SciPy versions, installed package metadata when available, and the result of a small core-scoring smoke check. It requires no GPU, benchmark download, or external model. A successful check reports `Core scoring smoke check: OK`; it **does not** validate any real benchmark integration, external dependency, or research claim.
+
+## `canopy score`: feedforward architecture-only bound
 
 ```bash
 canopy score --widths 2,64,64,1 --mode generic
@@ -8,59 +28,67 @@ canopy score --widths 2,64,64,1 --mode tight --json
 python -m canopy.cli score --widths 2,4,1 --json
 ```
 
-**Width order:** input dimension, all hidden-layer widths, then output
-dimension. Every width must be a positive integer.
+Layer widths are **input, zero or more hidden layers, output**; every width must be a positive integer. Supported modes:
 
-The `generic` and `tight` modes are architecture-level combinatorial
-**upper bounds**, not exact counts of the regions formed by particular
-network weights. The CLI describes the score as `count_bound` rather than
-mislabeling it as a log10 count.
+- `generic`: layer-wise product of hyperplane-arrangement factors.
+- `tight`: a bottleneck-aware combinatorial upper bound.
 
-`--json` outputs version, widths, mode, score units, and interpretation.
-The score is a **decimal string** in JSON, avoiding precision loss with very
-large combinatorial integers in downstream JavaScript and JSON consumers.
+Both return **integer architecture-level upper bounds** (`count_bound`), not log10 values and not counts realized by a particular set of trained/initialized weights. No DARTS operations or benchmark data are accepted by this command. See [`generic_linear_region_count`](../canopy/math/tropical_theory.py) and [`tropical_expressivity_score`](../canopy/nas/tropical_score.py).
 
-The `score` subcommand covers feedforward ReLU architectures; the separate
-`evaluate` subcommand below compares scores against real NATS-Bench TSS data.
-DARTS proxy scoring and experiment manifests remain separate interfaces.
-Do not interpret synthetic accuracies as real benchmark validation.
+`--json` includes `canopy_version`, `layer_widths`, `mode`, `score`, `score_units` and `score_interpretation`. The potentially large integer `score` is a **decimal string** to avoid JavaScript/JSON precision loss.
 
-## Real NATS-Bench evaluation
+### Expected output and invalid-input behavior
 
-Use the evaluation command to compare architecture-level scoring proxies
-with **real, explicitly provided** NATS-Bench TSS/NAS-Bench-201 entries:
+For `canopy score --widths 2,4,1 --mode generic`, the plain-text output is `11 (architecture-level region-count upper bound, generic)`. With `--json`, the `score` field is the decimal **string** `"11"`, and `score_units` is `"count_bound"` (not a measured accuracy or log10 value). The `tight` mode also returns a count bound; its value can differ from `generic`.
+
+The following are intentionally **invalid**; they print an `argparse` usage error to standard error, produce no score on standard output, and exit with status **2**:
 
 ```bash
-pip install -e '.[bench]'
-canopy evaluate \\
-  --benchmark-data /trusted/path/to/NATS-tss-v1_0-3ffb9-simple \\
-  --dataset cifar100 --hp 200 --seed 42 --limit 200 \\
+canopy score --widths 2,0,1       # zero width
+canopy score --widths 2,-1,1      # negative width
+canopy score --widths 2,wat,1     # non-integer width
+canopy score --widths 2          # missing output width
+canopy score --widths 2,4,1 --mode exact  # unsupported mode
+```
+
+A missing `--widths`, missing subcommand, or unknown subcommand likewise exits with status 2. These cases are covered by [`tests/test_cli.py`](../tests/test_cli.py); none requires benchmark assets.
+
+## `canopy evaluate`: explicitly supplied real NATS-Bench TSS data
+
+Get a trusted **TSS/topology** artifact from the [official NATS-Bench repository](https://github.com/D-X-Y/NATS-Bench). Use either its extracted `NATS-tss-v1_0-3ffb9-simple` directory or the matching `NATS-tss-v1_0-3ffb9.pickle.pbz2` file. The CLI does not download the data and never silently generates synthetic accuracies.
+
+```bash
+canopy evaluate \
+  --benchmark-data /trusted/path/to/NATS-tss-v1_0-3ffb9-simple \
+  --dataset cifar100 --hp 200 --seed 42 --limit 200 \
   --output results/cifar100-seed42
 ```
 
-`--benchmark-data`, `--dataset`, `--seed`, and `--output` are mandatory.
-No synthetic fallback is allowed; missing or invalid architecture records
-cause an error instead of being omitted. The command samples indices
-uniformly without replacement and records the exact chosen indices.
-Limits are 2–1,000 architectures to bound the quadratic Kendall calculation.
+| Option | Behavior |
+| --- | --- |
+| `--benchmark-data` | **Required.** Path to a trusted real TSS file or directory; not a SSS/size-space benchmark |
+| `--dataset` | **Required.** `cifar10`, `cifar100`, or `ImageNet16-120` |
+| `--seed` | **Required.** Integer used to sample architecture indices without replacement |
+| `--output` | **Required.** A **new** output directory; existing paths are rejected |
+| `--hp` | `12` or `200`; defaults to `200` |
+| `--limit` | Number of distinct architectures, **2–1,000**; defaults to `200` |
+| `--benchmark-id` | Optional caller-provided provenance label |
+| `--sha256` | Optional **trusted external** 64-character SHA-256 expectation; supported only when benchmark data path is a **file** |
 
-For a **single trusted benchmark file**, `--sha256 VERIFIED_DIGEST` verifies
-a caller-supplied 64-digit hexadecimal checksum before loading any data.
-The tool does not verify the provenance of the checksum itself and will
-label data without a checksum as unverified. NATS-Bench files may use
-unsafe serialization formats; do not load archives from untrusted sources.
+Failure to find the artifact, invalid or missing test accuracies, missing measured parameters/FLOPs, mismatched sample indices, or failed API lookups raises an error rather than inventing a replacement value. The comparison is retrospective: it does **not** train architectures or substantiate earlier DARTS research claims.
 
-The report is written to a **new** output directory as
-`benchmark_comparison.json` and contains the benchmark metadata,
-sample seed and indices, and Spearman/Kendall/top-K comparisons.
-Rank correlation uses tie-aware Kendall tau-b and Spearman rho. Undefined
-correlations (constant rankings or fewer than two samples) appear as JSON
-`null`, not fabricated zeros. Top-K overlap is also `null` when the sample
-contains K or fewer architectures, since selecting every candidate would
-otherwise produce a misleading 100% score. Parameter-count and FLOPs
-baselines use the benchmark's measured resource values, not architecture
-proxies.
+### Output and limitations
 
-This retrospective test-accuracy evaluation does not prove CANOPY's
-NAS-Bench-301 claims or constitute training a neural architecture. It
-is independent of ExperimentRunner's separately proposed manifests.
+The command writes `benchmark_comparison.json` in the new output directory. The JSON records CANOPY version, benchmark `kind`, TSS dataset/`hp`, provenance label and checksum **status**, seed, the complete sampled index list, missing lookup count, and **aggregate** comparisons (`spearman_rho`, tie-aware `kendall_tau`, `top_10_accuracy`, `top_50_accuracy`) for the generic/tight bounds, **measured** parameter count and FLOPs, and a random baseline.
+
+Undefined correlations are stored as JSON `null`, not `0`; top-K overlap is `null` if the sampled count is **K or smaller**, because selecting everything is uninformative. **Known limitation:** when proxy or accuracy scores tie across the top-K cutoff, the current `np.argsort` selection can depend on input row order; top-K overlap is not tie-invariant in that case. See [issue #24](https://github.com/CodNoob100/canopy/issues/24) for the proposed metric-policy review. The CLI report is **not** a full per-architecture raw-score/accuracy table and does **not** write an `ExperimentRunner` manifest. Preserve separate raw data and environment provenance when conducting publishable research.
+
+Providing a SHA-256 merely verifies bytes against the **caller-supplied** digest. It does not independently authenticate its publisher. Files may be stored in formats that deserialize objects; **never load untrusted benchmark archives**, even when a checksum matches an untrusted source.
+
+### Verification status
+
+The implementation and invalid-data paths are covered by [`tests/test_evaluate_cli.py`](../tests/test_evaluate_cli.py) with offline fixtures and injected benchmark backends. Python CI passing does **not** demonstrate that this command was executed against a verified genuine NATS-Bench archive. This remains a tracked research validation step: [issue #29](https://github.com/CodNoob100/canopy/issues/29).
+
+## Related research interfaces
+
+`tropical_expressivity_score_darts(arch)` is a **log10-scale DARTS structural proxy**, not a `score` CLI mode. The `ExperimentRunner` creates its own results JSON, trajectory CSV and experiment manifest; see [reproducibility documentation](reproducibility.md). Model-based DARTS scripts require a separately installed [NAS-Bench-301 surrogate](https://github.com/automl/nasbench301) and trusted models, and those predictions are not direct measured training outcomes. See the [evidence ledger](research-evidence.md).
