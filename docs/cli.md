@@ -1,6 +1,6 @@
 # CANOPY command-line interface
 
-The `canopy` console script is installed from [`pyproject.toml`](../pyproject.toml). Its two subcommands do different things: `score` computes feedforward architecture-level bounds **without training**, while `evaluate` compares scores against an **explicitly provided** NATS-Bench topology-search-space (TSS) benchmark.
+The `canopy` console script is installed from [`pyproject.toml`](../pyproject.toml). Its three subcommands serve separate purposes: `doctor` checks the local core installation without external data, `score` computes feedforward architecture-level bounds **without training**, and `evaluate` compares scores against an **explicitly provided** NATS-Bench topology-search-space (TSS) benchmark.
 
 ## Installation
 
@@ -11,6 +11,14 @@ python -m pip install -e '.[bench]'
 ```
 
 The first command installs NumPy and SciPy. The optional `bench` extra installs the `nats-bench` API, **not** its external benchmark data. The `eval` extra adds plotting/analysis libraries for example scripts, and does not change the CLI's benchmark trust policy.
+
+## `canopy doctor`: offline installation check
+
+```bash
+python -m canopy.cli doctor
+```
+
+This prints CANOPY, Python, NumPy and SciPy versions, installed package metadata when available, and the result of a small core-scoring smoke check. It requires no GPU, benchmark download, or external model. A successful check reports `Core scoring smoke check: OK`; it **does not** validate any real benchmark integration, external dependency, or research claim.
 
 ## `canopy score`: feedforward architecture-only bound
 
@@ -73,7 +81,7 @@ Failure to find the artifact, invalid or missing test accuracies, missing measur
 
 The command writes `benchmark_comparison.json` in the new output directory. The JSON records CANOPY version, benchmark `kind`, TSS dataset/`hp`, provenance label and checksum **status**, seed, the complete sampled index list, missing lookup count, and **aggregate** comparisons (`spearman_rho`, tie-aware `kendall_tau`, `top_10_accuracy`, `top_50_accuracy`) for the generic/tight bounds, **measured** parameter count and FLOPs, and a random baseline.
 
-Undefined correlations are stored as JSON `null`, not `0`; top-K overlap is `null` if the sampled count is **K or smaller**, because selecting everything is uninformative. The CLI report is **not** a full per-architecture raw-score/accuracy table and does **not** write an `ExperimentRunner` manifest. Preserve separate raw data and environment provenance when conducting publishable research.
+Undefined correlations are stored as JSON `null`, not `0`; top-K overlap is `null` if the sampled count is **K or smaller**, because selecting everything is uninformative. **Known limitation:** when proxy or accuracy scores tie across the top-K cutoff, the current `np.argsort` selection can depend on input row order; top-K overlap is not tie-invariant in that case. See [issue #24](https://github.com/CodNoob100/canopy/issues/24) for the proposed metric-policy review. The CLI report is **not** a full per-architecture raw-score/accuracy table and does **not** write an `ExperimentRunner` manifest. Preserve separate raw data and environment provenance when conducting publishable research.
 
 Providing a SHA-256 merely verifies bytes against the **caller-supplied** digest. It does not independently authenticate its publisher. Files may be stored in formats that deserialize objects; **never load untrusted benchmark archives**, even when a checksum matches an untrusted source.
 
