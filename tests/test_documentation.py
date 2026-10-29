@@ -35,3 +35,12 @@ def test_readme_and_motivation_do_not_claim_exact_architecture_counts():
     assert "first training-free nas metric" not in text
     assert "independently reproduced results" in DOCUMENTS[0].read_text(encoding="utf-8")
 
+
+
+def test_cli_docs_cover_all_three_subcommands_and_top_k_tie_limit():
+    """Do not lose doctor onboarding or the current ranking caveat."""
+    cli_docs = (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
+    for subcommand in ("doctor", "score", "evaluate"):
+        assert f"canopy {subcommand}" in cli_docs
+    assert "top-K cutoff" in cli_docs
+    assert "input row order" in cli_docs
