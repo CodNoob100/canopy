@@ -135,6 +135,28 @@ class TestTopKAccuracy:
         acc = top_k_accuracy(pred, true, k=2)
         assert 0.0 <= acc <= 1.0
 
+    def test_predicted_cutoff_tie_is_undefined_regardless_of_row_order(self):
+        pred = np.ones(12)
+        true = np.arange(12, dtype=float)
+        permutation = np.array([9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8])
+        assert np.isnan(top_k_accuracy(pred, true, k=3))
+        assert np.isnan(top_k_accuracy(pred[permutation], true[permutation], k=3))
+
+    def test_true_cutoff_tie_is_undefined(self):
+        pred = np.arange(5, dtype=float)
+        true = np.array([0, 1, 2, 2, 4], dtype=float)
+        assert np.isnan(top_k_accuracy(pred, true, k=2))
+
+    def test_ties_inside_top_k_are_unambiguous(self):
+        pred = np.array([0, 1, 2, 4, 4], dtype=float)
+        true = np.array([0, 1, 2, 4, 4], dtype=float)
+        assert top_k_accuracy(pred, true, k=2) == 1.0
+
+    def test_nonfinite_top_k_scores_are_undefined(self):
+        true = np.arange(5, dtype=float)
+        assert np.isnan(top_k_accuracy(np.array([0, 1, 2, 3, np.nan]), true, k=2))
+        assert np.isnan(top_k_accuracy(true, np.array([0, 1, 2, 3, np.inf]), k=2))
+
 
 # ===================================================================
 #  Synthetic Benchmark
