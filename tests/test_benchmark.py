@@ -322,8 +322,13 @@ class TestCompareMetrics:
         for r in results:
             assert -1.0 <= r.kendall_tau <= 1.0
             assert -1.0 <= r.spearman_rho <= 1.0
-            assert 0.0 <= r.top_10_accuracy <= 1.0
-            assert 0.0 <= r.top_50_accuracy <= 1.0
+            # Architecture/resource proxies can tie across a top-K cutoff;
+            # their overlap is then undefined rather than arbitrarily ranked.
+            assert np.isnan(r.top_10_accuracy) or 0.0 <= r.top_10_accuracy <= 1.0
+            assert np.isnan(r.top_50_accuracy) or 0.0 <= r.top_50_accuracy <= 1.0
+        random = next(r for r in results if r.metric_name == "random")
+        assert not np.isnan(random.top_10_accuracy)
+        assert not np.isnan(random.top_50_accuracy)
 
     @pytest.mark.skipif(
         not _HAS_NATS_DATA,
