@@ -57,7 +57,10 @@ Rank correlation uses tie-aware Kendall tau-b and Spearman rho. Undefined
 correlations (constant rankings or fewer than two samples) appear as JSON
 `null`, not fabricated zeros. Top-K overlap is also `null` when the sample
 contains K or fewer architectures, since selecting every candidate would
-otherwise produce a misleading 100% score. Parameter-count and FLOPs
+otherwise produce a misleading 100% score. It is likewise `null` if
+either ranking has a tie crossing the K-th-place cutoff, or contains
+non-finite scores: there is no unique top-K set in those cases. Ties
+entirely within the selected top-K do not make overlap undefined. Parameter-count and FLOPs
 baselines use the benchmark's measured resource values, not architecture
 proxies.
 

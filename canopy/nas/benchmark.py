@@ -492,7 +492,13 @@ def top_k_accuracy(
     true_scores: np.ndarray,
     k: int = 10,
 ) -> float:
-    """Fraction of the true top-K found in the predicted top-K."""
+    """Fraction of the true top-K found in the predicted top-K.
+
+    Return NaN when a ranking ties across its K-th-place cutoff: there is
+    then no unique top-K set, and argsort's arbitrary tie order would make
+    overlap depend on the input row order. Ties wholly within (or outside)
+    the selected top-K are unambiguous. Non-finite scores are also undefined.
+    """
     n = len(predicted_scores)
     if n != len(true_scores):
         raise ValueError("Rankings must have the same length")
@@ -500,6 +506,12 @@ def top_k_accuracy(
         raise ValueError("k must be a positive integer")
     if n <= k:
         return float("nan")
+    for scores in (predicted_scores, true_scores):
+        if not np.all(np.isfinite(scores)):
+            return float("nan")
+        ordered = np.sort(scores)
+        if ordered[-k] == ordered[-k - 1]:
+            return float("nan")
     true_top_k = set(np.argsort(true_scores)[-k:])
     pred_top_k = set(np.argsort(predicted_scores)[-k:])
     return len(true_top_k & pred_top_k) / k
